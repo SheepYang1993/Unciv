@@ -1,3 +1,45 @@
+## 3.7.6
+
+Can specify a mod as a 'base ruleset' - 
+supports mods with no techs, alternate tech trees, no barbarians, no workers
+
+Unique units need not replace existing ones
+
+Tile variants!
+
+By SomeTroglodyte:
+
+- Fix minimap mouse dragging 
+- Fixed modded strategic resource without tech prerequisite
+
+By JackRainy:
+
+- Highlight unique offer suggestions 
+- Sort trades by expiration 
+- Citadel improvements + improved AI for forts 
+- Map Editor UI improvements
+
+## 3.7.5
+
+By SomeTroglodyte:
+- Keyboard: Left/Right arrows work in city screen
+- Small optimizations
+- Rationalism effect visible in city UI
+- Mods can have improvements above terrain features
+
+By Jack Rainy:
+- Player's automated workers don't build forts
+- Better Domination victory checks
+- Can continue turns after defeat, as spectator
+
+New screen for "Add Game" - By GGGuenni
+
+Resolved #2348 - construction queue 'cleaned' after every construction
+
+Resolved #2413 - Hotkeys for unit actions always displayed
+
+Translation updates
+
 ## 3.7.4
 
 By Jack Rainy:
