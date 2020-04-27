@@ -2,7 +2,6 @@ package com.unciv.logic.civilization
 
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.math.Vector2
-import com.sun.xml.internal.bind.v2.runtime.reflect.opt.Const
 import com.unciv.Constants
 import com.unciv.JsonParser
 import com.unciv.UncivGame
@@ -20,7 +19,6 @@ import com.unciv.models.ruleset.Building
 import com.unciv.models.ruleset.Difficulty
 import com.unciv.models.ruleset.Nation
 import com.unciv.models.ruleset.VictoryType
-import com.unciv.models.ruleset.tech.TechEra
 import com.unciv.models.ruleset.tile.ResourceSupplyList
 import com.unciv.models.ruleset.unit.BaseUnit
 import com.unciv.models.stats.Stats
@@ -52,6 +50,7 @@ class CivilizationInfo {
     /** This is for performance since every movement calculation depends on this, see MapUnit comment */
     @Transient var hasActiveGreatWall = false
     @Transient var statsForNextTurn = Stats()
+    @Transient var happinessForNextTurn = 0
     @Transient var detailedCivResources = ResourceSupplyList()
 
     var playerType = PlayerType.AI
@@ -148,11 +147,12 @@ class CivilizationInfo {
     fun stats() = CivInfoStats(this)
     fun transients() = CivInfoTransientUpdater(this)
 
-    fun updateStatsForNextTurn(){
-        statsForNextTurn = stats().getStatMapForNextTurn().values.toList().reduce{a,b->a+b}
+    fun updateStatsForNextTurn() {
+        happinessForNextTurn = stats().getHappinessBreakdown().values.sum().roundToInt()
+        statsForNextTurn = stats().getStatMapForNextTurn().values.reduce { a, b -> a + b }
     }
 
-    fun getHappiness() = stats().getHappinessBreakdown().values.sum().roundToInt()
+    fun getHappiness() = happinessForNextTurn
 
 
     fun getCivResources(): ResourceSupplyList {
@@ -517,7 +517,7 @@ class CivilizationInfo {
     }
 
     fun giveGoldGift(otherCiv: CivilizationInfo, giftAmount: Int) {
-        if(!otherCiv.isCityState()) throw Exception("You can only gain influence with city states!")
+        if(!otherCiv.isCityState()) throw Exception("You can only gain influence with City-States!")
         gold -= giftAmount
         otherCiv.getDiplomacyManager(this).influence += giftAmount/10
         otherCiv.updateAllyCivForCityState()

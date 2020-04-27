@@ -76,7 +76,7 @@ class CivInfoStats(val civInfo: CivilizationInfo){
                 statMap.add(entry.key, entry.value)
         }
 
-        //City states culture bonus
+        //City-States culture bonus
         for (otherCiv in civInfo.getKnownCivs()) {
             if (otherCiv.isCityState() && otherCiv.getCityStateType() == CityStateType.Cultured
                     && otherCiv.getDiplomacyManager(civInfo.civName).relationshipLevel() >= RelationshipLevel.Friend) {
@@ -85,20 +85,16 @@ class CivInfoStats(val civInfo: CivilizationInfo){
                 if(civInfo.nation.unique == UniqueAbility.FATHER_GOVERNS_CHILDREN)
                     culture*=1.5f
                 cultureBonus.add(Stat.Culture, culture)
-                statMap.add("City States",cultureBonus)
+                statMap.add("City-States",cultureBonus)
             }
-        }
-
-        for (entry in getHappinessBreakdown()) {
-            statMap.add(entry.key, Stats().apply { happiness=entry.value })
         }
 
         statMap["Transportation upkeep"] = Stats().apply { gold=- getTransportationUpkeep().toFloat()}
         statMap["Unit upkeep"] = Stats().apply { gold=- getUnitUpkeep().toFloat()}
 
         if (civInfo.policies.hasEffect("50% of excess happiness added to culture towards policies")) {
-            val happiness = statMap.values.map { it.happiness }.sum()
-            if(happiness>0) statMap.add("Policies", Stats().apply { culture=happiness/2 })
+            val happiness = civInfo.getHappiness()
+            if(happiness>0) statMap.add("Policies", Stats().apply { culture=happiness/2f })
         }
 
         // negative gold hurts science
@@ -127,7 +123,7 @@ class CivInfoStats(val civInfo: CivilizationInfo){
         statMap["Luxury resources"]= civInfo.getCivResources().map { it.resource }
                 .count { it.resourceType === ResourceType.Luxury } * happinessPerUniqueLuxury
 
-        for(city in civInfo.cities.toList()){
+        for(city in civInfo.cities){
             for(keyvalue in city.cityStats.happinessList){
                 if(statMap.containsKey(keyvalue.key))
                     statMap[keyvalue.key] = statMap[keyvalue.key]!!+keyvalue.value
@@ -151,10 +147,10 @@ class CivInfoStats(val civInfo: CivilizationInfo){
         for (otherCiv in civInfo.getKnownCivs()) {
             if (otherCiv.isCityState() && otherCiv.getCityStateType() == CityStateType.Mercantile
                     && otherCiv.getDiplomacyManager(civInfo).relationshipLevel() >= RelationshipLevel.Friend) {
-                if (statMap.containsKey("City-states"))
-                    statMap["City-states"] = statMap["City-states"]!! + 3f
+                if (statMap.containsKey("City-States"))
+                    statMap["City-States"] = statMap["City-States"]!! + 3f
                 else
-                    statMap["City-states"] = 3f
+                    statMap["City-States"] = 3f
             }
         }
 

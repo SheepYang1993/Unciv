@@ -25,13 +25,20 @@ object GameStarter {
         else gameInfo.tileMap = MapGenerator(ruleset).generateMap(mapParameters)
         gameInfo.tileMap.mapParameters = mapParameters
 
-        gameInfo.tileMap.setTransients(ruleset)
-
         gameInfo.tileMap.gameInfo = gameInfo // need to set this transient before placing units in the map
+        addCivilizations(newGameParameters, gameInfo, ruleset) // this is before gameInfo.setTransients, so gameInfo doesn't yet have the gameBasics
+
+        for(tile in gameInfo.tileMap.values)
+            for(unit in tile.getUnits())
+                if(gameInfo.civilizations.none { it.civName== unit.owner}){
+                    unit.currentTile=tile
+                    unit.removeFromTile()
+                }
+
+        gameInfo.tileMap.setTransients(ruleset) // if we're starting from a map with preplaced units, they need the civs to exist first
+
         gameInfo.difficulty = newGameParameters.difficulty
 
-
-        addCivilizations(newGameParameters, gameInfo, ruleset) // this is before the setTransients so gameInfo doesn't yet have the gameBasics
 
         gameInfo.setTransients() // needs to be before placeBarbarianUnit because it depends on the tilemap having its gameinfo set
 
@@ -85,8 +92,8 @@ object GameStarter {
                         .map { it.improvement!!.replace("StartingLocation ", "") }
 
         val availableCityStatesNames = Stack<String>()
-        // since we shuffle and then order by, we end up with all the city states with starting tiles first in a random order,
-        //   and then all the other city states in a random order! Because the sortedBy function is stable!
+        // since we shuffle and then order by, we end up with all the City-States with starting tiles first in a random order,
+        //   and then all the other City-States in a random order! Because the sortedBy function is stable!
         availableCityStatesNames.addAll(ruleset.nations.filter { it.value.isCityState() }.keys
                 .shuffled().sortedByDescending { it in cityStatesWithStartingLocations })
 

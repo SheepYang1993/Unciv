@@ -5,12 +5,10 @@ import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.scenes.scene2d.InputEvent
 import com.badlogic.gdx.scenes.scene2d.InputListener
 import com.badlogic.gdx.scenes.scene2d.actions.Actions
-import com.badlogic.gdx.scenes.scene2d.ui.TextButton
 import com.unciv.logic.MapSaver
 import com.unciv.logic.map.TileInfo
 import com.unciv.logic.map.TileMap
 import com.unciv.models.ruleset.RulesetCache
-import com.unciv.models.translations.tr
 import com.unciv.ui.utils.*
 
 class MapEditorScreen(): CameraStageBaseScreen() {
@@ -25,15 +23,15 @@ class MapEditorScreen(): CameraStageBaseScreen() {
     private val showHideEditorOptionsButton = ">".toTextButton()
 
 
-    constructor(mapNameToLoad: String?): this() {
+    constructor(mapNameToLoad: String?) : this() {
         var mapToLoad = mapNameToLoad
         if (mapToLoad == null) {
             val existingSaves = MapSaver.getMaps()
-            if(existingSaves.isNotEmpty())
+            if (existingSaves.isNotEmpty())
                 mapToLoad = existingSaves.first()
         }
 
-        if(mapToLoad != null){
+        if (mapToLoad != null) {
             mapName = mapToLoad
             tileMap = MapSaver.loadMap(mapName)
         }
@@ -41,16 +39,16 @@ class MapEditorScreen(): CameraStageBaseScreen() {
         initialize()
     }
 
-    constructor(map: TileMap): this() {
+    constructor(map: TileMap) : this() {
         tileMap = map
         initialize()
     }
 
     fun initialize() {
-        tileMap.setTransients(ruleset)
+        tileMap.setTransients(ruleset,false)
 
         mapHolder = EditorMapHolder(this, tileMap)
-        mapHolder.addTiles()
+        mapHolder.addTiles(stage.width)
         stage.addActor(mapHolder)
         stage.scrollFocus = mapHolder
 
@@ -75,7 +73,7 @@ class MapEditorScreen(): CameraStageBaseScreen() {
 
         val optionsMenuButton = "Menu".toTextButton()
         optionsMenuButton.onClick {
-            if(popups.any { it is MapEditorMenuPopup })
+            if (popups.any { it is MapEditorMenuPopup })
                 return@onClick // already open
             MapEditorMenuPopup(this).open(force = true)
         }
@@ -86,7 +84,7 @@ class MapEditorScreen(): CameraStageBaseScreen() {
         optionsMenuButton.y = 30f
         stage.addActor(optionsMenuButton)
 
-        mapHolder.addCaptureListener(object: InputListener() {
+        mapHolder.addCaptureListener(object : InputListener() {
             var isDragging = false
             var isPainting = false
             var touchDownTime = System.currentTimeMillis()
@@ -119,7 +117,6 @@ class MapEditorScreen(): CameraStageBaseScreen() {
                         val distance = tileEditorOptions.brushSize - 1
 
                         for (tileInfo in tileMap.getTilesInDistance(centerTileInfo.position, distance)) {
-
                             tileEditorOptions.updateTileWhenClicked(tileInfo)
 
                             tileInfo.setTransients()
@@ -144,5 +141,12 @@ class MapEditorScreen(): CameraStageBaseScreen() {
             }
         })
     }
+
+    override fun resize(width: Int, height: Int) {
+        if (stage.viewport.screenWidth != width || stage.viewport.screenHeight != height) {
+            game.setScreen(MapEditorScreen(mapHolder.tileMap))
+        }
+    }
 }
+
 

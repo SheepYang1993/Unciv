@@ -54,7 +54,9 @@ class UnitMovementAlgorithms(val unit:MapUnit) {
         val distanceToTiles = PathsToTilesWithinTurn()
         if (unitMovement == 0f) return distanceToTiles
 
-        val unitTile = unit.getTile().tileMap[origin]
+        val currentUnitTile = unit.currentTile
+        // This is for performance, because this is called all the time
+        val unitTile = if(origin==currentUnitTile.position) currentUnitTile else currentUnitTile.tileMap[origin]
         distanceToTiles[unitTile] = ParentTileAndTotalDistance(unitTile, 0f)
         var tilesToCheck = listOf(unitTile)
 
@@ -189,6 +191,7 @@ class UnitMovementAlgorithms(val unit:MapUnit) {
         return destinationTileThisTurn
     }
 
+    /** This is performance-heavy - use as last resort, only after checking everything else! */
     fun canReach(destination: TileInfo): Boolean {
         if (unit.type.isAirUnit())
             return unit.currentTile.aerialDistanceTo(destination) <= unit.getRange()*2
@@ -255,12 +258,12 @@ class UnitMovementAlgorithms(val unit:MapUnit) {
         unit.removeFromTile()
         unit.putInTile(destination)
 
-        for (payload in origin.getUnits().filter { it.isTransported }) {  // bring along the payloads
-            if (unit.canTransport(payload)) {
-                payload.removeFromTile()
-                payload.putInTile(destination)
-                payload.isTransported = true // restore the flag to not leave the payload in the city
-            }
+        // The .toList() here is because we have a sequence that's running on the units in the tile,
+        // then if we move one of the units we'll get a ConcurrentModificationException, se we save them all to a list
+        for (payload in origin.getUnits().filter { it.isTransported && unit.canTransport(it) }.toList()) {  // bring along the payloads
+            payload.removeFromTile()
+            payload.putInTile(destination)
+            payload.isTransported = true // restore the flag to not leave the payload in the cit
         }
 
         // Unit maintenance changed
@@ -342,14 +345,14 @@ class UnitMovementAlgorithms(val unit:MapUnit) {
         if (tile.naturalWonder != null) return false
 
         val tileOwner = tile.getOwner()
-        if (tileOwner != null && tileOwner.civName != unit.owner) {
+        if (tileOwner != null && tileOwner != unit.civInfo) { // comparing the CivInfo objects is cheaper than comparing strings?
             if (tile.isCityCenter() && !tile.getCity()!!.hasJustBeenConquered) return false
             if (!unit.civInfo.canEnterTiles(tileOwner)
                     && !(unit.civInfo.isPlayerCivilization() && tileOwner.isCityState())) return false
             // AIs won't enter city-state's border.
         }
 
-        val firstUnit = tile.getUnits().firstOrNull()
+        val firstUnit = tile.getFirstUnit()
         if (firstUnit != null && firstUnit.civInfo != unit.civInfo && unit.civInfo.isAtWarWith(firstUnit.civInfo))
             return false
 

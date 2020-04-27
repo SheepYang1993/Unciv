@@ -90,7 +90,7 @@ class UncivGame(
 
                 if (settings.isFreshlyCreated) {
                     setScreen(LanguagePickerScreen())
-                } else { setScreen(MenuScreen()) }
+                } else { setScreen(MainMenuScreen()) }
                 isInitialized = true
             }
         }
@@ -147,12 +147,12 @@ class UncivGame(
         if (!isInitialized) return // The stuff from Create() is still happening, so the main screen will load eventually
         ImageGetter.refreshAtlas()
 
-        setScreen(MenuScreen())
+        setScreen(MainMenuScreen())
     }
 
     // Maybe this will solve the resume error on chrome OS, issue 322? Worth a shot
     override fun resize(width: Int, height: Int) {
-        resume()
+        screen.resize(width, height)
     }
 
     override fun dispose() {

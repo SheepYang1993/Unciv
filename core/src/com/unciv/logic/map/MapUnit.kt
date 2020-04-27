@@ -11,7 +11,6 @@ import com.unciv.logic.civilization.CivilizationInfo
 import com.unciv.logic.map.action.MapUnitAction
 import com.unciv.logic.map.action.StringAction
 import com.unciv.models.ruleset.Ruleset
-import com.unciv.models.ruleset.tech.TechEra
 import com.unciv.models.ruleset.tile.TerrainType
 import com.unciv.models.ruleset.unit.BaseUnit
 import com.unciv.models.ruleset.unit.UnitType
@@ -223,7 +222,7 @@ class MapUnit {
 
     fun isEmbarked(): Boolean {
         if(!type.isLandUnit()) return false
-        return currentTile.getBaseTerrain().type==TerrainType.Water
+        return currentTile.isWater
     }
 
     fun isInvisible(): Boolean {
@@ -478,7 +477,7 @@ class MapUnit {
         civInfo.removeUnit(this)
         civInfo.updateViewableTiles()
         // all transported units should be destroyed as well
-        currentTile.getUnits().filter { it.isTransported && isTransportTypeOf(it) }
+        currentTile.getUnits().filter { it.isTransported && isTransportTypeOf(it) }.toList() // because we're changing the list
                 .forEach { unit -> unit.destroy() }
     }
 
@@ -534,8 +533,8 @@ class MapUnit {
     }
 
     fun disband() {
-        // evacuation of transported units before disbanding, if possible
-        for (unit in currentTile.getUnits().filter { it.isTransported && isTransportTypeOf(it) }) {
+        // evacuation of transported units before disbanding, if possible. toListed because we're modifying the unit list.
+        for (unit in currentTile.getUnits().filter { it.isTransported && isTransportTypeOf(it) }.toList()) {
             // we disbanded a carrier in a city, it can still stay in the city
             if (currentTile.isCityCenter() && unit.movement.canMoveTo(currentTile)) continue
             // if no "fuel" to escape, should be disbanded as well
@@ -582,7 +581,7 @@ class MapUnit {
         actions.add {
             val chosenUnit = listOf(Constants.settler, Constants.worker,"Warrior")
                     .filter { civInfo.gameInfo.ruleSet.units.containsKey(it) }.random(tileBasedRandom)
-            if (!(civInfo.isCityState() || civInfo.isOneCityChallenger()) || chosenUnit != Constants.settler) { //City states and OCC don't get settler from ruins
+            if (!(civInfo.isCityState() || civInfo.isOneCityChallenger()) || chosenUnit != Constants.settler) { //City-States and OCC don't get settler from ruins
                 civInfo.placeUnitNearTile(tile.position, chosenUnit)
                 civInfo.addNotification("A [$chosenUnit] has joined us!", tile.position, Color.BROWN)
             }
@@ -684,6 +683,7 @@ class MapUnit {
 
             if (health <= 0) {
                 civInfo.addNotification("An enemy [Citadel] has destroyed our [$name]", currentTile.position, Color.RED)
+                // todo - add notification for attacking civ
                 destroy()
             } else {
                 civInfo.addNotification("An enemy [Citadel] has attacked our [$name]", currentTile.position, Color.RED)

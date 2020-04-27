@@ -9,21 +9,29 @@ import com.unciv.ui.utils.onClick
 import com.unciv.ui.map.TileGroupMap
 import com.unciv.ui.utils.*
 import com.unciv.logic.HexMath
+import com.unciv.logic.civilization.CivilizationInfo
 
 class EditorMapHolder(internal val mapEditorScreen: MapEditorScreen, internal val tileMap: TileMap): ZoomableScrollPane() {
     val tileGroups = HashMap<TileInfo, TileGroup>()
     lateinit var tileGroupMap: TileGroupMap<TileGroup>
 
-    internal fun addTiles() {
+    internal fun addTiles(padding:Float) {
 
         val tileSetStrings = TileSetStrings()
         for (tileGroup in tileMap.values.map { TileGroup(it, tileSetStrings) })
             tileGroups[tileGroup.tileInfo] = tileGroup
 
-        tileGroupMap = TileGroupMap(tileGroups.values, mapEditorScreen.stage.width)
+        tileGroupMap = TileGroupMap(tileGroups.values, padding)
         actor = tileGroupMap
 
+
         for (tileGroup in tileGroups.values) {
+
+            // This is a hack to make the unit icons render correctly on the game, even though the map isn't part of a game
+            // and the units aren't assigned to any "real" CivInfo
+            tileGroup.tileInfo.getUnits().forEach { it.civInfo= CivilizationInfo()
+                    .apply { nation=mapEditorScreen.ruleset.nations[it.owner]!! } }
+
             tileGroup.showEntireMap = true
             tileGroup.update()
             tileGroup.onClick {
@@ -33,7 +41,7 @@ class EditorMapHolder(internal val mapEditorScreen: MapEditorScreen, internal va
                 for (tileInfo in mapEditorScreen.tileMap.getTilesInDistance(tileGroup.tileInfo.position, distance)) {
                     mapEditorScreen.tileEditorOptions.updateTileWhenClicked(tileInfo)
 
-                    tileInfo.setTransients()
+                    tileInfo.setTerrainTransients()
                     tileGroups[tileInfo]!!.update()
                 }
             }

@@ -1,15 +1,14 @@
 package com.unciv.ui.mapeditor
 
 import com.badlogic.gdx.Gdx
-import com.badlogic.gdx.scenes.scene2d.ui.TextButton
 import com.badlogic.gdx.scenes.scene2d.ui.TextField
 import com.badlogic.gdx.utils.Json
 import com.unciv.Constants
+import com.unciv.MainMenuScreen
 import com.unciv.UncivGame
 import com.unciv.logic.MapSaver
 import com.unciv.logic.map.MapType
 import com.unciv.logic.map.RoadStatus
-import com.unciv.models.translations.tr
 import com.unciv.ui.saves.Gzip
 import com.unciv.ui.utils.*
 import com.unciv.ui.worldscreen.mainmenu.DropBox
@@ -55,7 +54,8 @@ class MapEditorMenuPopup(mapEditorScreen: MapEditorScreen): Popup(mapEditorScree
             thread ( name = "SaveMap" ) {
                 try {
                     MapSaver.saveMap(mapEditorScreen.mapName, mapEditorScreen.tileMap)
-                    UncivGame.Current.setWorldScreen()
+                    close()
+                    ResponsePopup("Map saved", mapEditorScreen) // todo - add this text to translations
                 } catch (ex: Exception) {
                     ex.printStackTrace()
                     Gdx.app.postRunnable {
@@ -114,8 +114,8 @@ class MapEditorMenuPopup(mapEditorScreen: MapEditorScreen): Popup(mapEditorScree
 
 
         val exitMapEditorButton = "Exit map editor".toTextButton()
-        exitMapEditorButton.onClick { UncivGame.Current.setWorldScreen(); mapEditorScreen.dispose() }
         add(exitMapEditorButton ).row()
+        exitMapEditorButton.onClick { mapEditorScreen.game.setScreen(MainMenuScreen()); mapEditorScreen.dispose() }
 
         val closeOptionsButton = Constants.close.toTextButton()
         closeOptionsButton.onClick { close() }
