@@ -9,12 +9,22 @@ import com.badlogic.gdx.backends.lwjgl.LwjglApplicationConfiguration
 import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.tools.texturepacker.TexturePacker
 import com.unciv.UncivGame
+import com.unciv.UncivGameParameters
 import com.unciv.models.translations.tr
+import io.ktor.application.call
+import io.ktor.http.HttpStatusCode
+import io.ktor.request.receiveText
+import io.ktor.response.respond
+import io.ktor.response.respondText
+import io.ktor.routing.get
+import io.ktor.routing.post
+import io.ktor.routing.routing
+import io.ktor.server.engine.embeddedServer
+import io.ktor.server.netty.Netty
 import java.io.File
 import java.util.*
 import kotlin.concurrent.timer
 import kotlin.system.exitProcess
-
 
 internal object DesktopLauncher {
     private var discordTimer: Timer? = null
@@ -32,13 +42,69 @@ internal object DesktopLauncher {
 
         val versionFromJar = DesktopLauncher.javaClass.`package`.specificationVersion ?: "Desktop"
 
-        val game = UncivGame ( versionFromJar, null, { exitProcess(0) }, { discordTimer?.cancel() } )
+        val desktopParameters = UncivGameParameters(
+                versionFromJar,
+                exitEvent = { exitProcess(0) },
+                cancelDiscordEvent = { discordTimer?.cancel() },
+                fontImplementation = NativeFontDesktop(45)
+        )
+
+        val game = UncivGame ( desktopParameters )
 
         if(!RaspberryPiDetector.isRaspberryPi()) // No discord RPC for Raspberry Pi, see https://github.com/yairm210/Unciv/issues/1624
             tryActivateDiscord(game)
 
         LwjglApplication(game, config)
     }
+
+    private fun startMultiplayerServer() {
+//        val games = HashMap<String, GameSetupInfo>()
+        val files = HashMap<String, String>()
+        embeddedServer(Netty, 8080) {
+            routing {
+                get("/files/getFile/{fileName}") {
+                    val fileName = call.parameters["fileName"]
+                    if (!files.containsKey(fileName)) call.respond(HttpStatusCode.NotFound,
+                            "Game with the name $fileName does not exist")
+                    else call.respondText(files[fileName]!!)
+                }
+
+                post("/files/{fileName}") {
+                    val fileName = call.parameters["fileName"]!!
+                    val body = call.receiveText()
+                    files[fileName] = body
+                }
+//
+//                get("/getGame/{gameName}") {
+//                    val gameName = call.parameters["gameName"]
+//                    if(!games.containsKey(gameName)) call.respond(HttpStatusCode.NotFound,
+//                            "Game with the name $gameName does not exist")
+//                    else call.respondText(Json().toJson(games[gameName]))
+//                }
+//                get("/getGameNames"){
+//                    call.respondText(Json().toJson(games.keys.toList()))
+//                }
+//                post("/addNewGame/{gameName}") {
+//                    val gameName = call.parameters["gameName"]!!
+//                    if (games.containsKey(gameName)) {
+//                        call.respond(HttpStatusCode.NotAcceptable, "A game with the name $gameName already exists")
+//                        return@post
+//                    }
+//                    val body = call.receiveText()
+//                    val newGameInfo:GameSetupInfo
+//                    try{
+//                        newGameInfo = Json().apply { ignoreUnknownFields }.fromJson(GameSetupInfo::class.java, body)
+//                    }
+//                    catch (ex:Exception){
+//                        call.respond(HttpStatusCode.NotAcceptable, "Could not deserialize json")
+//                        return@post
+//                    }
+//                    games[gameName] = newGameInfo
+//                }
+            }
+        }.start()
+    }
+
 
     private fun packImages() {
         val startTime = System.currentTimeMillis()

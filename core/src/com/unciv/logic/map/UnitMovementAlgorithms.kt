@@ -23,7 +23,13 @@ class UnitMovementAlgorithms(val unit:MapUnit) {
         if (from.roadStatus == RoadStatus.Railroad && to.roadStatus == RoadStatus.Railroad)
             return 1 / 10f + extraCost
 
-        if (from.hasConnection(civInfo) && to.hasConnection(civInfo))
+        val areConnectedByRoad = from.hasConnection(civInfo) && to.hasConnection(civInfo)
+        if(from.isConnectedByRiver(to) &&
+                (!areConnectedByRoad || !civInfo.tech.roadsConnectAcrossRivers)){
+            return 100f // Rivers take the entire turn to cross
+        }
+
+        if (areConnectedByRoad)
         {
             return if (unit.civInfo.tech.movementSpeedOnRoadsImproved) 1 / 3f + extraCost
             else 1 / 2f + extraCost
@@ -269,7 +275,7 @@ class UnitMovementAlgorithms(val unit:MapUnit) {
         // Unit maintenance changed
         if (unit.canGarrison()
                 && (origin.isCityCenter() || destination.isCityCenter())
-                && unit.civInfo.policies.isAdopted("Oligarchy")
+                && unit.civInfo.hasUnique("Units in cities cost no Maintenance")
         ) unit.civInfo.updateStatsForNextTurn()
 
         // Move through all intermediate tiles to get ancient ruins, barb encampments
@@ -321,15 +327,17 @@ class UnitMovementAlgorithms(val unit:MapUnit) {
     // so multiple callees of this function have been optimized,
     // because optimization on this function results in massive benefits!
     fun canPassThrough(tile: TileInfo): Boolean {
-        if (tile.getBaseTerrain().impassable) return false
+        if (tile.isImpassible()){
+            // special exception - ice tiles are technically impassible, but somme units can move through them anyway
+            if (!(tile.terrainFeature == Constants.ice && unit.canEnterIceTiles))
+                return false
+        }
         if (tile.isLand
                 && unit.type.isWaterUnit()
                 // Check that the tile is not a coastal city's center
                 && !(tile.isCityCenter() && tile.isCoastalTile()))
             return false
 
-        if (tile.terrainFeature == Constants.ice && !unit.canEnterIceTiles)
-            return false
 
         if (tile.isWater && unit.type.isLandUnit()) {
             if (!unit.civInfo.tech.unitsCanEmbark) return false

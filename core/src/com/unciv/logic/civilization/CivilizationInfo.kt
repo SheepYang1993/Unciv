@@ -22,6 +22,7 @@ import com.unciv.models.ruleset.VictoryType
 import com.unciv.models.ruleset.tile.ResourceSupplyList
 import com.unciv.models.ruleset.unit.BaseUnit
 import com.unciv.models.stats.Stats
+import com.unciv.models.translations.equalsPlaceholderText
 import com.unciv.models.translations.tr
 import com.unciv.ui.victoryscreen.RankingType
 import java.util.*
@@ -65,7 +66,7 @@ class CivilizationInfo {
     var diplomacy = HashMap<String, DiplomacyManager>()
     var notifications = ArrayList<Notification>()
     val popupAlerts = ArrayList<PopupAlert>()
-    var allyCivName = ""
+    private var allyCivName = ""
     var naturalWonders = ArrayList<String>()
 
     //** for trades here, ourOffers is the current civ's offers, and theirOffers is what the requesting civ offers  */
@@ -132,6 +133,7 @@ class CivilizationInfo {
             gameInfo.gameParameters.oneCityChallenge)
     fun isCurrentPlayer() =  gameInfo.getCurrentPlayerCivilization()==this
     fun isBarbarian() =  nation.isBarbarian()
+    fun isSpectator() = nation.isSpectator()
     fun isCityState(): Boolean = nation.isCityState()
     fun getCityStateType(): CityStateType = nation.cityStateType!!
     fun isMajorCiv() = nation.isMajorCiv()
@@ -176,8 +178,15 @@ class CivilizationInfo {
 
     fun hasResource(resourceName:String): Boolean = getCivResourcesByName()[resourceName]!!>0
 
-    fun containsBuildingUnique(unique:String) = cities.any { it.containsBuildingUnique(unique) }
+    private fun getCivUniques() = policies.policyEffects.asSequence() + cities.asSequence().flatMap { it.getBuildingUniques() }
 
+    // This is
+    fun hasUnique(unique:String) = getCivUniques().contains(unique)
+
+    fun getMatchingUniques(uniqueTemplate: String) =
+            if (uniqueTemplate.contains('['))
+                getCivUniques().filter { it.equalsPlaceholderText(uniqueTemplate) }
+            else getCivUniques().filter { it==uniqueTemplate }
 
     //region Units
     fun getCivUnits(): Sequence<MapUnit> = units.asSequence()
@@ -252,8 +261,8 @@ class CivilizationInfo {
 
         otherCiv.diplomacy[civName] = DiplomacyManager(otherCiv, civName)
                 .apply { diplomaticStatus = DiplomaticStatus.Peace }
-
         popupAlerts.add(PopupAlert(AlertType.FirstContact,otherCiv.civName))
+
         if(isCurrentPlayer() || otherCiv.isCurrentPlayer())
             UncivGame.Current.settings.addCompletedTutorialTask("Meet another civilization")
     }
@@ -269,9 +278,12 @@ class CivilizationInfo {
     fun isDefeated()= cities.isEmpty() // No cities
             && exploredTiles.isNotEmpty()  // Dirty hack: exploredTiles are empty only before starting units are placed
             && !isBarbarian() // Barbarians can be never defeated
+            && !isSpectator() // can't loose in Spectator mode
             && (citiesCreated > 0 || !getCivUnits().any { it.name == Constants.settler })
 
     fun getEra(): String {
+        if(tech.researchedTechnologies.isEmpty())
+            return gameInfo.ruleSet.getEras().first()
         val maxEraOfTech =  tech.researchedTechnologies
                 .asSequence()
                 .map { it.column!! }
@@ -545,9 +557,7 @@ class CivilizationInfo {
         addNotification("[${otherCiv.civName}] gave us a [${militaryUnit.name}] as gift near [${city.name}]!", null, Color.GREEN)
     }
 
-    fun getAllyCiv(): String {
-        return allyCivName
-    }
+    fun getAllyCiv() = allyCivName
 
     fun updateAllyCivForCityState() {
         var newAllyName = ""

@@ -18,14 +18,16 @@ import com.unciv.ui.worldscreen.WorldScreen
 import java.util.*
 import kotlin.concurrent.thread
 
-class UncivGame(
-        val version: String,
-        private val crashReportSender: CrashReportSender? = null,
-        val exitEvent: (()->Unit)? = null,
-        val cancelDiscordEvent: (()->Unit)? = null
-) : Game() {
+class UncivGame(parameters: UncivGameParameters) : Game() {
     // we need this secondary constructor because Java code for iOS can't handle Kotlin lambda parameters
-    constructor(version: String) : this(version, null)
+    constructor(version: String) : this(UncivGameParameters(version, null))
+
+    val version = parameters.version
+    private val crashReportSender = parameters.crashReportSender
+    val exitEvent = parameters.exitEvent
+    val cancelDiscordEvent = parameters.cancelDiscordEvent
+    val fontImplementation = parameters.fontImplementation
+    val consoleMode = parameters.consoleMode
 
     lateinit var gameInfo: GameInfo
     fun isGameInfoInitialized() = this::gameInfo.isInitialized
@@ -44,6 +46,10 @@ class UncivGame(
      *  Set to 0 to disable.
      */
     val simulateUntilTurnForDebug: Int = 0
+
+    /** Console log battles
+     */
+    val alertBattle = false
 
     lateinit var worldScreen: WorldScreen
 
@@ -83,7 +89,6 @@ class UncivGame(
 
             // This stuff needs to run on the main thread because it needs the GL context
             Gdx.app.postRunnable {
-                CameraStageBaseScreen.resetFonts()
                 ImageGetter.ruleset = RulesetCache.getBaseRuleset() // so that we can enter the map editor without having to load a game first
                 thread(name="Music") { startMusic() }
                 restoreSize()
@@ -108,6 +113,8 @@ class UncivGame(
     fun loadGame(gameInfo: GameInfo) {
         this.gameInfo = gameInfo
         ImageGetter.ruleset = gameInfo.ruleSet
+        Gdx.input.inputProcessor = null // Since we will set the world screen when we're ready,
+                                        // This is to avoid ANRs when loading.
         ImageGetter.refreshAtlas()
         worldScreen = WorldScreen(gameInfo.getPlayerToViewAs())
         setWorldScreen()
@@ -145,27 +152,36 @@ class UncivGame(
     override fun resume() {
         super.resume()
         if (!isInitialized) return // The stuff from Create() is still happening, so the main screen will load eventually
-        ImageGetter.refreshAtlas()
-
-        setScreen(MainMenuScreen())
     }
 
-    // Maybe this will solve the resume error on chrome OS, issue 322? Worth a shot
+    override fun pause() {
+        if (this::gameInfo.isInitialized) GameSaver.autoSave(this.gameInfo)
+        super.pause()
+    }
+
     override fun resize(width: Int, height: Int) {
         screen.resize(width, height)
     }
 
     override fun dispose() {
         cancelDiscordEvent?.invoke()
-        if (::gameInfo.isInitialized){
-            GameSaver.autoSaveSingleThreaded(gameInfo)      // NO new thread
-            settings.save()
-        }
 
         // Log still running threads (should be only this one and "DestroyJavaVM")
         val numThreads = Thread.activeCount()
-        val threadList = Array<Thread>(numThreads) { _ -> Thread() }
+        val threadList = Array(numThreads) { _ -> Thread() }
         Thread.enumerate(threadList)
+
+        if (::gameInfo.isInitialized){
+            val autoSaveThread = threadList.firstOrNull { it.name == "Autosave" }
+            if (autoSaveThread != null && autoSaveThread.isAlive) {
+                // auto save is already in progress (e.g. started by onPause() event)
+                // let's allow it to finish and do not try to autosave second time
+                autoSaveThread.join()
+            } else
+                GameSaver.autoSaveSingleThreaded(gameInfo)      // NO new thread
+            settings.save()
+        }
+
         threadList.filter { it !== Thread.currentThread() && it.name != "DestroyJavaVM"}.forEach {
             println ("    Thread ${it.name} still running in UncivGame.dispose().")
         }
@@ -188,5 +204,4 @@ class LoadingScreen:CameraStageBaseScreen() {
         stage.addActor(happinessImage)
     }
 }
-
 

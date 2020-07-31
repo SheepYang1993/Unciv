@@ -1,6 +1,7 @@
 package com.unciv.ui.worldscreen
 
 import com.badlogic.gdx.graphics.Color
+import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.scenes.scene2d.Event
 import com.badlogic.gdx.scenes.scene2d.Group
 import com.badlogic.gdx.scenes.scene2d.InputListener
@@ -29,18 +30,27 @@ class Minimap(val mapHolder: WorldMapHolder) : ScrollPane(null){
         scrollPercentY = mapHolder.scrollPercentY
     }
 
-    init{
+    init {
+        setScrollingDisabled(true, true)
+
         var topX = 0f
         var topY = 0f
         var bottomX = 0f
         var bottomY = 0f
 
+        fun hexRow(vector2: Vector2) = vector2.x + vector2.y
+        val maxHexRow = mapHolder.tileMap.values.asSequence().map { hexRow(it.position) }.max()!!
+        val minHexRow = mapHolder.tileMap.values.asSequence().map { hexRow(it.position) }.min()!!
+        val totalHexRows = maxHexRow - minHexRow
+
         for (tileInfo in mapHolder.tileMap.values) {
             val hex = ImageGetter.getImage("OtherIcons/Hexagon")
 
             val positionalVector = HexMath.hex2WorldCoords(tileInfo.position)
-            val groupSize = 10f
-            hex.setSize(groupSize,groupSize)
+
+
+            val groupSize = 400f / totalHexRows
+            hex.setSize(groupSize, groupSize)
             hex.setPosition(positionalVector.x * 0.5f * groupSize,
                     positionalVector.y * 0.5f * groupSize)
             hex.onClick {
@@ -67,7 +77,7 @@ class Minimap(val mapHolder: WorldMapHolder) : ScrollPane(null){
         actor = allTiles
         layout()
         updateVisualScroll()
-        mapHolder.addListener(object : InputListener(){
+        mapHolder.addListener(object : InputListener() {
             override fun handle(e: Event?): Boolean {
                 setScrollTomapHolder()
                 return true
@@ -85,7 +95,7 @@ class Minimap(val mapHolder: WorldMapHolder) : ScrollPane(null){
             else if (tileInfo.getCity() != null && !tileInfo.isWater)
                 hex.color = tileInfo.getOwner()!!.nation.getOuterColor()
             else hex.color = tileInfo.getBaseTerrain().getColor().lerp(Color.GRAY, 0.5f)
-            if (tileInfo.isCityCenter() && tileInfo.owningCity!!.getTiles().any { cloneCivilization.exploredTiles.contains(it.position) }) {
+            if (tileInfo.isCityCenter() && cloneCivilization.exploredTiles.contains(tileInfo.getCity()!!.getCenterTile().position)) {
                 val nationIcon= ImageGetter.getNationIndicator(tileInfo.owningCity!!.civInfo.nation,hex.width * 3)
                 nationIcon.setPosition(hex.x - nationIcon.width/3,hex.y - nationIcon.height/3)
                 nationIcon.onClick {
@@ -110,14 +120,15 @@ class MinimapHolder(mapHolder: WorldMapHolder): Table(){
 
     fun getWrappedMinimap(): Table {
         val internalMinimapWrapper = Table()
-
-        val sizePercent = worldScreen.game.settings.minimapSize
-        val sizeWinX = worldScreen.stage.width * sizePercent / 100
-        val sizeWinY = worldScreen.stage.height * sizePercent / 100
-        val isSquare = worldScreen.game.settings.minimapSquare
-        val sizeX = if (isSquare) sqrt(sizeWinX * sizeWinY) else sizeWinX
-        val sizeY = if (isSquare) sizeX else sizeWinY
-        internalMinimapWrapper.add(minimap).size(sizeX,sizeY)
+//         // Temporarily disabled until we can make them work nicely together
+//        val sizePercent = worldScreen.game.settings.minimapSize
+//        val sizeWinX = worldScreen.stage.width * sizePercent / 100
+//        val sizeWinY = worldScreen.stage.height * sizePercent / 100
+//        val isSquare = worldScreen.game.settings.minimapSquare
+//        val sizeX = if (isSquare) sqrt(sizeWinX * sizeWinY) else sizeWinX
+//        val sizeY = if (isSquare) sizeX else sizeWinY
+        internalMinimapWrapper.add(minimap) //.size(sizeX,sizeY)
+        minimap
 
         internalMinimapWrapper.background=ImageGetter.getBackground(Color.GRAY)
         internalMinimapWrapper.pack()
@@ -144,7 +155,10 @@ class MinimapHolder(mapHolder: WorldMapHolder): Table(){
         }
         toggleIconTable.add(populationImage).row()
 
-        val resourceImage = ImageGetter.getImage("ResourceIcons/Cattle").surroundWithCircle(40f)
+        val resourceImage = ImageGetter.getImage("ResourceIcons/Cattle")
+                .surroundWithCircle(30f).apply { circle.color = Color.GREEN }
+                .surroundWithCircle(40f,false).apply { circle.color = Color.BLACK }
+
         resourceImage.actor.color.a = if(settings.showResourcesAndImprovements) 1f else 0.5f
         resourceImage.onClick {
             settings.showResourcesAndImprovements = !settings.showResourcesAndImprovements

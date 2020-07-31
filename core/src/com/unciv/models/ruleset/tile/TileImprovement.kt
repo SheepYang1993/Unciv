@@ -25,12 +25,12 @@ class TileImprovement : NamedStats() {
 
     val turnsToBuild: Int = 0 // This is the base cost.
 
-
     fun getTurnsToBuild(civInfo: CivilizationInfo): Int {
         var realTurnsToBuild = turnsToBuild.toFloat() * civInfo.gameInfo.gameParameters.gameSpeed.modifier
-        if (civInfo.containsBuildingUnique("Worker construction increased 25%"))
+        // todo UNIFY THESE
+        if (civInfo.hasUnique("Worker construction increased 25%"))
             realTurnsToBuild *= 0.75f
-        if (civInfo.policies.isAdopted("Citizenship"))
+        if (civInfo.hasUnique("Tile improvement speed +25%"))
             realTurnsToBuild *= 0.75f
         return realTurnsToBuild.roundToInt()
     }
@@ -71,5 +71,6 @@ class TileImprovement : NamedStats() {
     }
 
     fun hasUnique(unique: String) = uniques.contains(unique)
+    fun isGreatImprovement() = hasUnique("Great improvement")
 }
 

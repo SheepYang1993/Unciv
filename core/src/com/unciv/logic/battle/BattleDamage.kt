@@ -5,6 +5,8 @@ import com.unciv.UniqueAbility
 import com.unciv.logic.map.MapUnit
 import com.unciv.logic.map.TileInfo
 import com.unciv.models.ruleset.unit.UnitType
+import com.unciv.models.translations.equalsPlaceholderText
+import com.unciv.models.translations.getPlaceholderParameters
 import java.util.*
 import kotlin.collections.HashMap
 import kotlin.collections.set
@@ -19,8 +21,6 @@ class BattleDamageModifier(val vs:String,val modificationAmount:Float){
 object BattleDamage {
 
     const val BONUS_VS_UNIT_TYPE = """(Bonus|Penalty) vs (.*) (\d*)%"""
-    const val BONUS_AS_ATTACKER = """Bonus as Attacker \[(\d*)]%"""
-    const val HEAL_WHEN_KILL = """Heals \[(\d*)] damage if it kills a unit"""
 
     private fun getBattleDamageModifiersOfUnit(unit:MapUnit): MutableList<BattleDamageModifier> {
         val modifiers = mutableListOf<BattleDamageModifier>()
@@ -71,7 +71,7 @@ object BattleDamage {
                 modifiers["Populism"] = 0.25f
             }
 
-            if (civInfo.policies.hasEffect("+15% combat strength for melee units which have another military unit in an adjacent tile")
+            if (civInfo.hasUnique("+15% combat strength for melee units which have another military unit in an adjacent tile")
                     && combatant.isMelee()
                     && combatant.getTile().neighbors.flatMap { it.getUnits() }
                             .any { it.civInfo == civInfo && !it.type.isCivilian() && !it.type.isAirUnit() })
@@ -103,30 +103,30 @@ object BattleDamage {
 
         if (enemy.getCivInfo().isBarbarian()) {
             modifiers["Difficulty"] = civInfo.gameInfo.getDifficulty().barbarianBonus
-            if (civInfo.policies.hasEffect("+25% bonus vs Barbarians; gain Culture when you kill a barbarian unit"))
+            if (civInfo.policies.hasEffect("+25% bonus vs Barbarians"))
                 modifiers["vs Barbarians"] = 0.25f
         }
         
         return modifiers
     }
 
-    fun getAttackModifiers(attacker: ICombatant, defender: ICombatant): HashMap<String, Float> {
+    fun getAttackModifiers(attacker: ICombatant, tileToAttackFrom:TileInfo?, defender: ICombatant): HashMap<String, Float> {
         val modifiers = getGeneralModifiers(attacker, defender)
         val policies = attacker.getCivInfo().policies
 
-        if(attacker is MapUnitCombatant) {
-            modifiers.putAll(getTileSpecificModifiers(attacker,defender.getTile()))
+        if (attacker is MapUnitCombatant) {
+            modifiers.putAll(getTileSpecificModifiers(attacker, defender.getTile()))
 
             for (ability in attacker.unit.getUniques()) {
-                val regexResult = Regex(BONUS_AS_ATTACKER).matchEntire(ability) //to do: extend to defender, and penalyy
-                if (regexResult == null) continue
-                val bonus = regexResult.groups[1]!!.value.toFloat() / 100
-                if (modifiers.containsKey("Attacker Bonus"))
-                    modifiers["Attacker Bonus"] =modifiers["Attacker Bonus"]!! + bonus
-                else modifiers["Attacker Bonus"] = bonus
+                if(ability.equalsPlaceholderText("Bonus as Attacker []%")) {
+                    val bonus = ability.getPlaceholderParameters()[0].toFloat() / 100
+                    if (modifiers.containsKey("Attacker Bonus"))
+                        modifiers["Attacker Bonus"] = modifiers["Attacker Bonus"]!! + bonus
+                    else modifiers["Attacker Bonus"] = bonus
+                }
             }
 
-            if(attacker.unit.isEmbarked() && !attacker.unit.hasUnique("Amphibious"))
+            if (attacker.unit.isEmbarked() && !attacker.unit.hasUnique("Amphibious"))
                 modifiers["Landing"] = -0.5f
 
             if (attacker.isMelee()) {
@@ -136,24 +136,28 @@ object BattleDamage {
                             && MapUnitCombatant(it.militaryUnit!!).isMelee()
                 }
                 if (numberOfAttackersSurroundingDefender > 1)
-                    modifiers["Flanking"] = 0.1f * (numberOfAttackersSurroundingDefender-1) //https://www.carlsguides.com/strategy/civilization5/war/combatbonuses.php
+                    modifiers["Flanking"] = 0.1f * (numberOfAttackersSurroundingDefender - 1) //https://www.carlsguides.com/strategy/civilization5/war/combatbonuses.php
+
+                if (tileToAttackFrom != null && tileToAttackFrom.isConnectedByRiver(defender.getTile())) {
+                    if (!tileToAttackFrom.hasConnection(attacker.getCivInfo()) // meaning, the tiles are not road-connected for this civ
+                            || !defender.getTile().hasConnection(attacker.getCivInfo())
+                            || !attacker.getCivInfo().tech.roadsConnectAcrossRivers) {
+                        modifiers["Across river"] = -0.2f
+                    }
+                }
             }
 
             if (policies.autocracyCompletedTurns > 0 && policies.hasEffect("+20% attack bonus to all Military Units for 30 turns"))
                 modifiers["Autocracy Complete"] = 0.2f
 
             if (defender is CityCombatant &&
-                    attacker.getCivInfo().containsBuildingUnique("+15% Combat Strength for all units when attacking Cities"))
+                    attacker.getCivInfo().hasUnique("+15% Combat Strength for all units when attacking Cities"))
                 modifiers["Statue of Zeus"] = 0.15f
-        }
-
-        else if (attacker is CityCombatant) {
+        } else if (attacker is CityCombatant) {
             if (policies.hasEffect("Units in cities cost no Maintenance, garrisoned city +50% attacking strength")
                     && attacker.city.getCenterTile().militaryUnit != null)
                 modifiers["Oligarchy"] = 0.5f
         }
-
-
 
         return modifiers
     }
@@ -203,7 +207,7 @@ object BattleDamage {
 
     private fun getTileSpecificModifiers(unit: MapUnitCombatant, tile: TileInfo): HashMap<String,Float> {
         val modifiers = HashMap<String,Float>()
-        if(tile.isFriendlyTerritory(unit.getCivInfo()) && unit.getCivInfo().containsBuildingUnique("+15% combat strength for units fighting in friendly territory"))
+        if(tile.isFriendlyTerritory(unit.getCivInfo()) && unit.getCivInfo().hasUnique("+15% combat strength for units fighting in friendly territory"))
             modifiers["Himeji Castle"] = 0.15f
         if(!tile.isFriendlyTerritory(unit.getCivInfo()) && unit.unit.hasUnique("+20% bonus outside friendly territory"))
             modifiers["Foreign Land"] = 0.2f
@@ -217,7 +221,8 @@ object BattleDamage {
                         || tile.terrainFeature != Constants.jungle))
             modifiers[tile.baseTerrain] = 0.25f
 
-        if(unit.getCivInfo().nation.unique == UniqueAbility.WAYFINDING && tile.getTilesInDistance(2).any { it.improvement=="Moai" })
+        if(unit.getCivInfo().nation.unique == UniqueAbility.WAYFINDING
+                && tile.getTilesInDistance(2).any { it.improvement=="Moai" })
             modifiers["Moai"] = 0.1f
 
         if(tile.neighbors.flatMap { it.getUnits() }
@@ -265,8 +270,8 @@ object BattleDamage {
     /**
      * Includes attack modifiers
      */
-    private fun getAttackingStrength(attacker: ICombatant, defender: ICombatant): Float {
-        val attackModifier = modifiersToMultiplicationBonus(getAttackModifiers(attacker,defender))
+    private fun getAttackingStrength(attacker: ICombatant, tileToAttackFrom: TileInfo?, defender: ICombatant): Float {
+        val attackModifier = modifiersToMultiplicationBonus(getAttackModifiers(attacker,tileToAttackFrom, defender))
         return attacker.getAttackingStrength() * attackModifier
     }
 
@@ -280,15 +285,15 @@ object BattleDamage {
         return defender.getDefendingStrength() * defenceModifier
     }
 
-    fun calculateDamageToAttacker(attacker: ICombatant, defender: ICombatant): Int {
+    fun calculateDamageToAttacker(attacker: ICombatant, tileToAttackFrom: TileInfo?, defender: ICombatant): Int {
         if(attacker.isRanged()) return 0
         if(defender.getUnitType().isCivilian()) return 0
-        val ratio = getAttackingStrength(attacker,defender) / getDefendingStrength(attacker,defender)
+        val ratio = getAttackingStrength(attacker, tileToAttackFrom, defender) / getDefendingStrength(attacker,defender)
         return (damageModifier(ratio, true) * getHealthDependantDamageRatio(defender)).roundToInt()
     }
 
-    fun calculateDamageToDefender(attacker: ICombatant, defender: ICombatant): Int {
-        val ratio = getAttackingStrength(attacker,defender) / getDefendingStrength(attacker,defender)
+    fun calculateDamageToDefender(attacker: ICombatant, tileToAttackFrom: TileInfo?, defender: ICombatant): Int {
+        val ratio = getAttackingStrength(attacker,tileToAttackFrom, defender) / getDefendingStrength(attacker,defender)
         return (damageModifier(ratio,false) * getHealthDependantDamageRatio(attacker)).roundToInt()
     }
 

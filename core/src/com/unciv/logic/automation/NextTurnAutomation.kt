@@ -8,11 +8,13 @@ import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.civilization.diplomacy.DiplomaticModifiers
 import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
 import com.unciv.logic.civilization.diplomacy.RelationshipLevel
+import com.unciv.logic.map.BFS
 import com.unciv.logic.map.MapUnit
 import com.unciv.logic.trade.*
 import com.unciv.models.ruleset.VictoryType
 import com.unciv.models.ruleset.tech.Technology
 import com.unciv.models.translations.tr
+import java.lang.reflect.Modifier
 import kotlin.math.min
 
 object NextTurnAutomation{
@@ -29,7 +31,6 @@ object NextTurnAutomation{
 //            offerDeclarationOfFriendship(civInfo)
             offerPeaceTreaty(civInfo)
             offerResearchAgreement(civInfo)
-            exchangeTechs(civInfo)
             exchangeLuxuries(civInfo)
             issueRequests(civInfo)
             adoptPolicy(civInfo)
@@ -48,10 +49,16 @@ object NextTurnAutomation{
     }
 
     private fun respondToTradeRequests(civInfo: CivilizationInfo) {
-        for(tradeRequest in civInfo.tradeRequests){
+        for(tradeRequest in civInfo.tradeRequests.toList()){
             val otherCiv = civInfo.gameInfo.getCivilization(tradeRequest.requestingCiv)
             val tradeLogic = TradeLogic(civInfo, otherCiv)
             tradeLogic.currentTrade.set(tradeRequest.trade)
+            /** We need to remove this here, so that if the trade is accepted, the updateDetailedCivResources()
+             * in tradeLogic.acceptTrade() will not consider *both* the trade *and the trade offer as decreasing the
+             * amount of available resources, since that will lead to "Our proposed trade is no longer valid" if we try to offer
+             * the same resource to ANOTHER civ in this turn. Complicated!
+             */
+            civInfo.tradeRequests.remove(tradeRequest)
             if(TradeEvaluation().isTradeAcceptable(tradeLogic.currentTrade,civInfo,otherCiv)){
                 tradeLogic.acceptTrade()
                 otherCiv.addNotification("[${civInfo.civName}] has accepted your trade request", Color.GOLD)
@@ -131,47 +138,9 @@ object NextTurnAutomation{
         }
     }
 
-    private fun exchangeTechs(civInfo: CivilizationInfo) {
-        if (!civInfo.gameInfo.getDifficulty().aisExchangeTechs) return
-        val otherCivList = civInfo.getKnownCivs()
-                .filter { it.playerType == PlayerType.AI && it.isMajorCiv() && !civInfo.isAtWarWith(it) }
-                .sortedBy { it.tech.techsResearched.size }
-
-        for (otherCiv in otherCivList) {
-            val tradeLogic = TradeLogic(civInfo, otherCiv)
-            var ourGold = tradeLogic.ourAvailableOffers.first { it.type == TradeType.Gold }.amount
-            val ourTradableTechs = tradeLogic.ourAvailableOffers
-                    .filter { it.type == TradeType.Technology }
-            val theirTradableTechs = tradeLogic.theirAvailableOffers
-                    .filter { it.type == TradeType.Technology }
-
-            for (theirOffer in theirTradableTechs) {
-                val theirValue = TradeEvaluation().evaluateBuyCost(theirOffer, civInfo, otherCiv)
-                val ourOfferList = ourTradableTechs.filter {
-                    TradeEvaluation().evaluateBuyCost(it, otherCiv, civInfo) == theirValue
-                            && !tradeLogic.currentTrade.ourOffers.contains(it) }
-
-                if (ourOfferList.isNotEmpty()) {
-                    tradeLogic.currentTrade.ourOffers.add(ourOfferList.random())
-                    tradeLogic.currentTrade.theirOffers.add(theirOffer)
-                } else if (ourGold / 2 >= theirValue) {
-                    //try to buy tech with money, not spending more than 1/3 of treasury
-                    tradeLogic.currentTrade.ourOffers.add(TradeOffer("Gold".tr(), TradeType.Gold, theirValue))
-                    tradeLogic.currentTrade.theirOffers.add(theirOffer)
-                    ourGold -= theirValue
-                }
-            }
-
-            if (tradeLogic.currentTrade.theirOffers.isNotEmpty()) {
-                val tradeRequest = TradeRequest(civInfo.civName, tradeLogic.currentTrade.reverse())
-                otherCiv.tradeRequests.add(tradeRequest)
-            }
-        }
-    }
-
     private fun getFreeTechForCityStates(civInfo: CivilizationInfo) {
         //City-States automatically get all invented techs
-        for (otherCiv in civInfo.getKnownCivs().filterNot { it.isCityState() }) {
+        for (otherCiv in civInfo.getKnownCivs().filter { it.isMajorCiv() }) {
             for (entry in otherCiv.tech.techsResearched
                     .filterNot { civInfo.tech.isResearched(it) }
                     .filter { civInfo.tech.canBeResearched(it) }) {
@@ -394,24 +363,70 @@ object NextTurnAutomation{
                 .filterNot { it == civInfo || it.cities.isEmpty() || !civInfo.getDiplomacyManager(it).canDeclareWar() }
         if (enemyCivs.isEmpty()) return
 
-        var enemyCivsToEvaluate = enemyCivs.filter { getMinDistanceBetweenCities(civInfo, it) <= 7 }
+        val civWithBestMotivationToAttack = enemyCivs
+                .map { Pair(it, motivationToAttack(civInfo, it)) }
+                .maxBy { it.second }!!
 
-        var isFightingFarAway = false
-        if (enemyCivsToEvaluate.isEmpty()) { // so, there ARE civs we can declare war on, just not close by
-            if (civInfo.victoryType() != VictoryType.Domination) return // No point in attacking civs that are too far away
-            enemyCivsToEvaluate = enemyCivs
-            isFightingFarAway = true
+        if (civWithBestMotivationToAttack.second >= 20)
+            civInfo.getDiplomacyManager(civWithBestMotivationToAttack.first).declareWar()
+    }
+
+    private fun motivationToAttack(civInfo:CivilizationInfo, otherCiv:CivilizationInfo): Int {
+        val ourCombatStrength = Automation.evaluteCombatStrength(civInfo).toFloat()
+        val theirCombatStrength = Automation.evaluteCombatStrength(otherCiv)
+        if (theirCombatStrength > ourCombatStrength) return 0
+
+        val modifierMap = HashMap<String, Int>()
+        val combatStrengthRatio = ourCombatStrength / theirCombatStrength
+        val combatStrengthModifier = when {
+            combatStrengthRatio > 3f -> 30
+            combatStrengthRatio > 2.5f -> 25
+            combatStrengthRatio > 2f -> 20
+            combatStrengthRatio > 1.5f -> 10
+            else -> 0
+        }
+        modifierMap["Relative combat strength"] = combatStrengthModifier
+
+        val closestCities = getClosestCities(civInfo, otherCiv)
+        val ourCity = closestCities.city1
+        val theirCity = closestCities.city2
+
+        if (closestCities.aerialDistance > 7)
+            modifierMap["Far away cities"] = -10
+
+        val landPathBFS = BFS(ourCity.getCenterTile()) {
+            val owner = it.getOwner();
+            it.isLand && !it.isImpassible()
+                    && (owner == otherCiv || owner == null || civInfo.canEnterTiles(owner))
         }
 
-        val weakestCloseCiv = enemyCivsToEvaluate.minBy { Automation.evaluteCombatStrength(it) }!!
-        val weakestCloseCivCombatStrength = Automation.evaluteCombatStrength(weakestCloseCiv)
-        val ourCombatStrength = Automation.evaluteCombatStrength(civInfo)
+        landPathBFS.stepUntilDestination(theirCity.getCenterTile())
+        if (!landPathBFS.hasReachedTile(theirCity.getCenterTile()))
+            modifierMap["No land path"] = -10
 
-        val amountWeNeedToBeStronger =
-                if (civInfo.victoryType() == VictoryType.Domination && !isFightingFarAway) 1.5f else 2f
+        val diplomacyManager = civInfo.getDiplomacyManager(otherCiv)
+        if(diplomacyManager.hasFlag(DiplomacyFlags.ResearchAgreement))
+            modifierMap["Research Agreement"] = -5
 
-        if (weakestCloseCivCombatStrength * amountWeNeedToBeStronger < ourCombatStrength)
-            civInfo.getDiplomacyManager(weakestCloseCiv).declareWar()
+        if(diplomacyManager.hasFlag(DiplomacyFlags.DeclarationOfFriendship))
+            modifierMap["Declaration of Friendship"] = -10
+
+        val relationshipModifier = when(diplomacyManager.relationshipLevel()){
+            RelationshipLevel.Unforgivable -> 10
+            RelationshipLevel.Enemy -> 5
+            RelationshipLevel.Ally -> -5 // this is so that ally + DoF is not too unbalanced -
+            // still possible for AI to declare war for isolated city
+            else -> 0
+        }
+        modifierMap["Relationship"] = relationshipModifier
+
+        if(diplomacyManager.resourcesFromTrade().any { it.amount > 0 })
+            modifierMap["Receiving trade resources"] = -5
+
+        if(theirCity.getTiles().none { it.neighbors.any { it.getOwner()==theirCity.civInfo && it.getCity() != theirCity } })
+            modifierMap["Isolated city"] = 15
+
+        return modifierMap.values.sum()
     }
 
     private fun automateUnits(civInfo: CivilizationInfo) {

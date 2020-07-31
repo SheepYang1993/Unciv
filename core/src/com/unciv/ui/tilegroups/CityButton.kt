@@ -77,13 +77,13 @@ class CityButton(val city: CityInfo, private val tileGroup: WorldTileGroup): Tab
                     (tile.civilianUnit != null) && direction.epsilonEquals(0f, 1f) ->
                         insertHiddenUnitMarker(HiddenUnitMarkerPosition.Left)
                     // detect military under the city
-                    (tile.militaryUnit != null) && direction.epsilonEquals(1f, 1f) ->
+                    (tile.militaryUnit != null && !tile.hasEnemyInvisibleUnit(worldScreen.viewingCiv)) && direction.epsilonEquals(1f, 1f) ->
                         insertHiddenUnitMarker(HiddenUnitMarkerPosition.Center)
                     // detect civilian right-below the city
                     (tile.civilianUnit != null) && direction.epsilonEquals(1f, 0f) ->
                         insertHiddenUnitMarker(HiddenUnitMarkerPosition.Right)
                 }
-            } else if (tile.militaryUnit != null) {
+            } else if (tile.militaryUnit != null && !tile.hasEnemyInvisibleUnit(worldScreen.viewingCiv)) {
                 when {
                     // detect military left from the city
                     direction.epsilonEquals(0f, 1f) ->
@@ -142,7 +142,7 @@ class CityButton(val city: CityInfo, private val tileGroup: WorldTileGroup): Tab
                 val viewingCiv = worldScreen.viewingCiv
                 // second tap on the button will go to the city screen
                 // if this city belongs to you
-                if (uncivGame.viewEntireMapForDebug || belongsToViewingCiv()) {
+                if (uncivGame.viewEntireMapForDebug || belongsToViewingCiv() || viewingCiv.isSpectator()) {
                     uncivGame.setScreen(CityScreen(city))
                 } else if (viewingCiv.knows(city.civInfo)) {
                     // If city doesn't belong to you, go directly to its owner's diplomacy screen.
@@ -203,15 +203,16 @@ class CityButton(val city: CityInfo, private val tileGroup: WorldTileGroup): Tab
             iconTable.add(connectionImage).size(20f).pad(2f).padLeft(5f)
         }
 
-        iconTable.add(getPopulationGroup(uncivGame.viewEntireMapForDebug || belongsToViewingCiv()))
-                .padLeft(10f)
+        iconTable.add(getPopulationGroup(uncivGame.viewEntireMapForDebug
+                || belongsToViewingCiv()
+                || worldScreen.viewingCiv.isSpectator())).padLeft(10f)
 
         val cityButtonText = city.name
         val label = cityButtonText.toLabel(secondaryColor)
         iconTable.add(label).pad(10f) // sufficient horizontal padding
                 .fillY() // provide full-height clicking area
 
-        if (uncivGame.viewEntireMapForDebug || belongsToViewingCiv())
+        if (uncivGame.viewEntireMapForDebug || belongsToViewingCiv() || worldScreen.viewingCiv.isSpectator())
             iconTable.add(getConstructionGroup(city.cityConstructions)).padRight(10f).padLeft(10f)
         else if (city.civInfo.isMajorCiv()) {
             val nationIcon = ImageGetter.getNationIcon(city.civInfo.nation.name)

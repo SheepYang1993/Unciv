@@ -36,6 +36,14 @@ class GameInfo {
     var currentPlayer=""
     var gameId = UUID.randomUUID().toString() // random string
 
+    /** Simulate until any player wins,
+     *  or turns exceeds indicated number
+     *  Does not update World View until finished.
+     *  Should be set manually on each new game start.
+     */
+    var simulateMaxTurns: Int = 1000
+    var simulateUntilWin = false
+
     //region pure functions
     fun clone(): GameInfo {
         val toReturn = GameInfo()
@@ -83,10 +91,11 @@ class GameInfo {
         switchTurn()
 
         while (thisPlayer.playerType == PlayerType.AI
-            || UncivGame.Current.simulateUntilTurnForDebug > turns
-                // For multiplayer, if there are 3+ players and one is defeated,
+            || turns < UncivGame.Current.simulateUntilTurnForDebug
+                || (turns < simulateMaxTurns && simulateUntilWin)
+                // For multiplayer, if there are 3+ players and one is defeated or spectator,
                 // we'll want to skip over their turn
-                || (thisPlayer.isDefeated() && gameParameters.isOnlineMultiplayer)
+                || ((thisPlayer.isDefeated() || thisPlayer.isSpectator()) && gameParameters.isOnlineMultiplayer)
         ) {
             if (!thisPlayer.isDefeated() || thisPlayer.isBarbarian()) {
                 NextTurnAutomation.automateCivMoves(thisPlayer)
@@ -95,12 +104,21 @@ class GameInfo {
                 if (thisPlayer.isBarbarian()
                         && !gameParameters.noBarbarians
                         && turns % 10 == 0) placeBarbarians()
+
+                // exit simulation mode when player wins
+                if (thisPlayer.victoryManager.hasWon() && simulateUntilWin) {
+                    // stop simulation
+                    simulateUntilWin = false
+                    break
+                }
             }
             switchTurn()
         }
 
         currentPlayer = thisPlayer.civName
         currentPlayerCiv = getCivilization(currentPlayer)
+        if (currentPlayerCiv.isSpectator()) currentPlayerCiv.popupAlerts.clear() // no popups for spectators
+
 
         // Start our turn immediately before the player can made decisions - affects whether our units can commit automated actions and then be attacked immediately etc.
         notifyOfCloseEnemyUnits(thisPlayer)
@@ -164,14 +182,13 @@ class GameInfo {
 
     fun placeBarbarianEncampment(existingEncampments: List<TileInfo>): TileInfo? {
         // Barbarians will only spawn in places that no one can see
-        val allViewableTiles = civilizations.filterNot { it.isBarbarian() }
+        val allViewableTiles = civilizations.filterNot { it.isBarbarian() || it.isSpectator() }
                 .flatMap { it.viewableTiles }.toHashSet()
         val tilesWithin3ofExistingEncampment = existingEncampments.asSequence()
                 .flatMap { it.getTilesInDistance(3) }.toSet()
         val viableTiles = tileMap.values.filter {
-            !it.getBaseTerrain().impassable && it.isLand
-                    && it.terrainFeature == null
-                    && it.naturalWonder == null
+            it.isLand && it.terrainFeature == null
+                    && !it.isImpassible()
                     && it !in tilesWithin3ofExistingEncampment
                     && it !in allViewableTiles
         }
@@ -211,7 +228,7 @@ class GameInfo {
      * adopted Honor policy and have explored the [tile] where the Barbarian Encampent has spawned.
      */
     fun notifyCivsOfBarbarianEncampment(tile: TileInfo) {
-        civilizations.filter { it.policies.isAdopted("Honor")
+        civilizations.filter { it.hasUnique("Notified of new Barbarian encampments")
                 && it.exploredTiles.contains(tile.position) }
                 .forEach { it.addNotification("A new barbarian encampment has spawned!", tile.position, Color.RED) }
     }
@@ -220,7 +237,7 @@ class GameInfo {
     // will be done here, and not in CivInfo.setTransients or CityInfo
     fun setTransients() {
         tileMap.gameInfo = this
-        ruleSet = RulesetCache.getComplexRuleset(gameParameters.mods)
+        ruleSet = RulesetCache.getComplexRuleset(gameParameters)
         // any mod the saved game lists that is currently not installed causes null pointer
         // exceptions in this routine unless it contained no new objects or was very simple.
         // Player's fault, so better complain early:
@@ -366,6 +383,4 @@ class GameInfo {
             cityConstructions.inProgressConstructions.remove(oldBuildingName)
         }
     }
-
 }
-

@@ -1,3 +1,416 @@
+## 3.9.16
+
+Resolved #3901 - nuclear weapon setting remains between games
+
+Game can now handle modded unique buildings that don't replace anything existing
+
+All improvement placing units are automated in the same way - this allows for the AI to control modded units that place other improvements!
+
+Railroad connection propagates correctly over harbor connections
+
+Resolved #2894 - Map editor button only opens popup once
+
+Translation updates
+
+## 3.9.15
+
+Removed confusing extra lines in the diplomacy overview
+
+Started splitting up Policy uniques - they're usable as Building uniques now!
+
+Upgradable units show the final unit they're upgrading to in the Overview screen
+
+Created stat parameter parsing and translation - uniques are much more moddable!
+
+Resolved #2838 - cities in resistance can no longer be traded
+
+Fix bug when city states gets all techs from spectators - By alkorolyov
+
+Translation updates
+
+## 3.9.14
+
+Added Pinglish translations
+
+Genericified "free [unit] appears", "must be next to []" unique for buildings
+
+Greatly improved performance of worker's automated city connecting
+
+Resolved #2853 - Sped up loading of saved game list
+
+Resolved #2852 - cannot make peace with a city state while at war with its ally
+
+Resolved #2864 - Locks on tiles are removed when the tile is no longer under your control
+
+Buildings that are missing resources are still displayed in city constructions
+
+Unit 'unbuildable' parameter converted to unique
+
+By alkorolyov:
+
+- Spectator can view other civ stats: Tech, Trades, Cities, Units, Gold
+- Skip spectator turn in multiplayer games
+
+## 3.9.13
+
+Simplified translation file generation
+
+Background work for "generic-ifying" unit and building uniques for modding purposes
+
+Worker unique is now moddable to other units
+
+By alkorolyov:
+- Spectators can enter and view other player cities
+- Fix map editor gameparameters layout
+
+Translation updates
+
+## 3.9.12
+
+Added Water Mill building
+
+Add mod compatibility for extended map editor - By alkorolyov
+
+Main menu buttons no longer require scrolling
+
+By lishaoxia1985:
+- Close button on map management screen no longer disappears when deleting all maps
+- Scout obsoletes per Civ V
+
+Translation updates
+
+## 3.9.11
+
+Better Civilopedia icons for buildings and units
+
+Resolved #2822 - normalized the amount of strategic resources
+
+Resolved #2819 - units no longer gain XP from attacking already defeated cities
+
+Resolved #2820 - resurrected civs are at peace with everyone
+
+ By alkorolyov:
+
+- Fixed two empty mods checkbox in game options 
+- Two experimental switches: Spectator mode & Extended Map Editor
+
+ By ninjatao:
+
+- Do not generate fallout on impasssible terran. 
+- Fix AI nuke radius
+
+Translation updates
+
+## 3.9.10
+
+Resource toggle button is consistent with population toggle - by @lishaoxia1985
+
+Unremovable terrain features e.g. Flood plains are no longer removed by great improvements
+
+Resolved #2640 - Difficulty level shown in victory status screen
+
+Great improvements are no longer hardcoded, so new great improvements can be modded in =)
+
+Resolved #2811 - Offering the same resource to 2 civs when you only have 2 left no longer causes 'trade no longer valid' for the second one
+
+Dispose main menu screen when exiting to save space
+
+Translation updates
+
+## 3.9.9
+
+Civ is properly destroyed when liberating the last city of the civ
+
+Replaced units are not shown in tech button even when replacing unique unit is in a different tech
+
+Fixed main menu crash when returning from certain modded games
+
+Resolved #2794 - Save games and maps cannot have slashes/backslashes, to avoid foldername/filename confusion
+
+Civ is properly destroyed when liberating the last city of the civ
+
+By alkorolyov:
+- Basic spectator functionality - POC
+- Console mode for multiple game automation - POC
+
+Added an installation problem solution on Ubuntu - By illantalex
+
+## 3.9.8
+
+Resolved #2787 - AIs MUCH more likely to build the Apollo Program and win a scientific victory
+
+Resolved #2789 - losing a resource no longer cancells all trades with that resource, only as many as is necessary to reach equilibrium
+
+Removed tech exchange, as per Civ V
+
+Resolved #2759 - Mark tiles for air unit attack range - By ninjatao
+
+Translation updates🍎
+
+## 3.9.7
+
+Resolved #2749 - show current improvement and remaining time to build in improvement picker screen
+
+Resolved #2112 - Show current resource amounts on incoming trade requests
+
+Hopefully mitigated some very odd multiplayer-checker-related crashes
+
+Fixed natural wonders not being considered 'impassible' for certain things (e.g. ancient ruins spawn)
+
+Translation updates
+
+## 3.9.6
+
+Resolved #2761 - Tutorial titles are auto-added to the translation files
+
+Resolved #2703 - placeholder translations now check active mods for translation values - by dbaelz
+
+Background work and POC for Scenario editor - By alkorolyov
+
+Improve performance of multiplayer load poll - By soggerr
+
+Translation updates
+
+## 3.9.5
+
+Fixed coast tiles around natural wonders spawning land-type layers
+
+By lyrjie:
+
+- Map generation speedup
+- Fixed strategic resources generation 
+
+By alkorolyov:
+
+- Now clearCurrentMapButton and TerrainsAndResources clears rivers.
+
+By ninjatao:
+
+- Fix oil generation in sea.
+- Fix forest display in Default tileset
+
+Translation updates
+
+## 3.9.4
+
+Opening the New Game screen from within a game saves the previous game parameters, map generation parameters work again
+
+Resolved #2662 - left side of the screen no longer becomes unresponsive to player input after changing from a selected unit to a selected city
+
+Resolved #2735 - Diplomatic "Friends with friend/enemy" modifiers are recalculated every turn
+
+Great improvements are marked as such in the Civilopedia
+
+Translation updates
+
+## 3.9.3
+
+Resolved #2723 - resource-specific improvement bonuses are *in addition to* the regular improvement bonuses, and not instead.
+
+Resolved #2708 - added rivers to plain tileset
+
+Medium-sized translation updates
+
+Meanwhile, in Google Play, we've reached 500K downloads!
+
+## 3.9.2
+
+Move units out of cities when liberating
+
+Thread crash fixes - By vainiovano
+
+New translation language - Lithuanian
+
+Clicking the menu button when it is open closes the menu
+
+Translation updates
+
+## 3.9.1
+
+Buildings requiring a nearby resource can be constructed even when the tile belongs to another city
+
+Natural wonders spawned before rivers, so we don't retroactively get rivers on coast tiles
+
+Added civilopedia info for great people and great improvements, removing terrain features, and strategic resource provision - see #1492
+
+Resolved #2613 - added a close button to the Civ-picking popup in the New Game screen
+
+Battle calculation takes into account the tile that the unit will attack from
+
+Translation updates
+
+## 3.9.0
+
+Added rivers, and river generation!
+
+Game now saves save files in external storage on Android when possible.
+
+Resolved #2672 - Difficulties are sorted by ascending difficulty in Civilopedia
+
+Resolved #2660 - Remove Fallout now enabled by Atomic Theory, not Agriculture
+
+Great person uniques can be added to any modded unit
+
+Translation updates
+
+## 3.8.12
+
+By dbaelz:
+
+- Minor UI improvements construction menu 
+- Evaluate translations for mods only when the mod is active in a game. Fixes #2622 
+- Add remove button for construction queue items 
+
+Resolved #2647 - Automated workers run away from enemy military units
+
+Advanced sliders work on New Map Screen
+
+Translation updates
+
+## 3.8.11
+
+Gold deficit only affects science when the civ has negative gold
+
+Resolved #2642 - added difficulty settings to Civilopedia
+
+Resolved #2549 - fixed New Game Screen capitalization, options alignment and placing
+
+Resources no longer spawn under unbuildable, unremovable terrain features
+
+Resolved #2638 - Auto-assign of population no longer "double books" tiles
+
+Uniformed the size of buttons on LanguagePickerScreen and MultiplayerScreen - By panchenco
+
+Don't reveal submarine position by city markers - By JackRainy
+
+Size optimization - By lishaoxia1985
+
+Translation updates
+
+## 3.8.10
+
+Font system rewrite to accept all characters and speed up game loading - By vainiovano
+
+More new tiles by The Bucketeer!
+
+New river-ready tiles by The Bucketeer!
+
+Fixed Manhattan Project being inversely affected by nuclear weapons disabling
+
+Translation updates
+
+## 3.8.9
+
+City-states no longer spawn Great Generals
+
+Can no longer see other human players' assigned tiles
+
+Resolved #2618 - better inter-city navigation in city screen
+
+Resolved #2611 - City button shrinks on zoom-in
+
+Fixed rare citadel crash
+
+Better trading posts by The Bucketeer!
+
+Years per turn normalized to game speed - By AcridBrimistic
+
+By JackRainy:
+
+- Civilian units no longer move when bought 
+- Fixed translation for civ start biases
+
+Translation updates
+
+## 3.8.8
+
+Redid layout for the New Game screen - see #2549
+
+Better jungles and lakes - by The Bucketeer
+
+Normalized "Buy" and "Fortify" sounds, so they're not overly loud
+
+Solved ANR when loading game to display its metadata
+
+Population assigned to tiles of other cities do not auto-unassign
+
+Settler automation takes into account which tiles already belong to other civs
+
+Translation updates
+
+## 3.8.7
+
+Small update this time!
+
+Resolved #2588 - instead of tile ownership being transferrable between cities, cities can now work tiles belonging to other cities.
+
+Size optimization - By vainiovano
+
+Translation updates
+
+## 3.8.6
+
+Performance improvement when selecting a tile to move to - By vainiovano
+
+Autosaves no longer garbled when exiting extremely large games - By JackRainy
+
+By SomeTroglodyte:
+- Better Resource order in empire overview screen
+- Typo fixes
+
+Resolved #2576 - Clicking on "Encountering" notifications now moves the map to the encounter location
+
+Differentiated between Portuguese and Brazilian Portuguese translations
+
+Translation updates
+
+## 3.8.5
+
+Maps no longer spawn ancient ruins in immediate vicinity of civ spawns
+
+Invisible Romanian characters are now visible
+
+Fixed thread crashes due to concurrent actor changes in multiplayer update popups
+
+Translation updates
+
+## 3.8.4
+
+Better "declare war" and city battle decisions (hopefully) for AI
+
+Minimap shows entire map again - now looks good for both rectangular and hexagonal maps
+
+Resolved #2536 - cities correctly expand to the last available tile
+
+Game always resume previous screen on resume(), and autosaves on pause
+
+By SomeTroglodyte:
+- Performance improvements
+- Translation generation for mods doesn't add entries that exist in base translation
+
+Translation updates
+
+## 3.8.3
+
+Performance improvement - by vainiovano 
+
+By SomeTroglodyte:
+
+- Terrace Farms: Bonus resource restriction 
+- Map editor: Placed improvement check updated, resolves #2489 
+
+Fixed 'auto assign production' not working when changing from manual to auto assign
+
+Fixed crashing error when loading mods
+
+Many performance improvements
+
+Fixed modification exception when destroying transported units
+
+Resource bonus from Fascism effective immediately
+
+Translation updates
+
 ## 3.8.2
 
 Main screen buttons fit in all languages - by Jack Rainy
@@ -55,7 +468,7 @@ Translation updates
 ## 3.7.6
 
 Can specify a mod as a 'base ruleset' - 
-supports mods with no techs, alternate tech trees, no barbarians, no workers
+supports mods with no techs, alternate tech trees, No Barbarians, no workers
 
 Unique units need not replace existing ones
 
@@ -734,7 +1147,7 @@ Spain civ added - by r3versi
 
 Background work towards enabling mods
 
-Resolved #1598 - we now save map options for new games started
+Resolved #1598 - we now save Map Options for new games started
 
 Specific AI automation for Missile units means they won't try to move to tiles that they can't move to
 

@@ -15,6 +15,8 @@ import com.unciv.models.UncivSound
 import com.unciv.models.UnitAction
 import com.unciv.models.UnitActionType
 import com.unciv.models.ruleset.Building
+import com.unciv.models.translations.equalsPlaceholderText
+import com.unciv.models.translations.getPlaceholderParameters
 import com.unciv.models.translations.tr
 import com.unciv.ui.pickerscreens.ImprovementPickerScreen
 import com.unciv.ui.pickerscreens.PromotionPickerScreen
@@ -67,10 +69,12 @@ object UnitActions {
         addConstructRoadsAction(unit, tile, actionList)
         addCreateWaterImprovements(unit, actionList)
         addGreatPersonActions(unit, actionList, tile)
+        actionList += getImprovementConstructionActions(unit, tile)
         addDisbandAction(actionList, unit, worldScreen)
 
         return actionList
     }
+
 
     private fun addDisbandAction(actionList: ArrayList<UnitAction>, unit: MapUnit, worldScreen: WorldScreen) {
         actionList += UnitAction(
@@ -283,7 +287,7 @@ object UnitActions {
 
     private fun addGreatPersonActions(unit: MapUnit, actionList: ArrayList<UnitAction>, tile: TileInfo) {
 
-        if (unit.name == "Great Scientist" && !unit.isEmbarked()) {
+        if (unit.hasUnique("Can hurry technology research") && !unit.isEmbarked()) {
             actionList += UnitAction(
                     type = UnitActionType.HurryResearch,
                     uncivSound = UncivSound.Chimes,
@@ -305,7 +309,7 @@ object UnitActions {
                     }.takeIf { unit.currentMovement > 0 })
         }
 
-        if (unit.name == "Great Engineer" && !unit.isEmbarked()) {
+        if (unit.hasUnique("Can speed up construction of a wonder") && !unit.isEmbarked()) {
             val canHurryWonder = if (unit.currentMovement == 0f || !tile.isCityCenter()) false
             else {
                 val currentConstruction = tile.getCity()!!.cityConstructions.getCurrentConstruction()
@@ -325,7 +329,8 @@ object UnitActions {
                     }.takeIf { canHurryWonder })
         }
 
-        if (unit.name == "Great Merchant" && !unit.isEmbarked()) {
+        if (unit.hasUnique("Can undertake a trade mission with City-State, giving a large sum of gold and [30] Influence")
+                && !unit.isEmbarked()) {
             val canConductTradeMission = tile.owningCity?.civInfo?.isCityState() == true
                     && tile.owningCity?.civInfo?.isAtWarWith(unit.civInfo) == false
                     && unit.currentMovement > 0
@@ -335,7 +340,7 @@ object UnitActions {
                     action = {
                         // http://civilization.wikia.com/wiki/Great_Merchant_(Civ5)
                         var goldEarned = (350 + 50 * unit.civInfo.getEraNumber()) * unit.civInfo.gameInfo.gameParameters.gameSpeed.modifier
-                        if (unit.civInfo.policies.isAdopted("Commerce Complete"))
+                        if (unit.civInfo.hasUnique("Double gold from Great Merchant trade missions"))
                             goldEarned *= 2
                         unit.civInfo.gold += goldEarned.toInt()
                         val relevantUnique = unit.getUniques().first { it.startsWith(CAN_UNDERTAKE) }
@@ -346,22 +351,22 @@ object UnitActions {
                         unit.destroy()
                     }.takeIf { canConductTradeMission })
         }
-
-        val buildImprovementAction = getBuildImprovementAction(unit)
-        if (buildImprovementAction != null) actionList += buildImprovementAction
     }
 
-    fun getBuildImprovementAction(unit: MapUnit): UnitAction? {
-        val tile = unit.currentTile
-        for (unique in unit.getUniques().filter { it.startsWith("Can build improvement: ") }) {
-            val improvementName = unique.replace("Can build improvement: ", "")
-            return UnitAction(
+
+    fun getImprovementConstructionActions(unit: MapUnit, tile: TileInfo): ArrayList<UnitAction> {
+        val finalActions = ArrayList<UnitAction>()
+        for (unique in unit.getUniques().filter { it.equalsPlaceholderText("Can construct []") }) {
+            val improvementName = unique.getPlaceholderParameters()[0]
+            finalActions +=  UnitAction(
                     type = UnitActionType.Create,
                     title = "Create [$improvementName]",
                     uncivSound = UncivSound.Chimes,
                     action = {
                         val unitTile = unit.getTile()
-                        unitTile.terrainFeature = null // remove forest/jungle/marsh
+                        if (unitTile.terrainFeature != null &&
+                                unitTile.ruleset.tileImprovements.containsKey("Remove " + unitTile.terrainFeature))
+                            unitTile.terrainFeature = null // remove forest/jungle/marsh
                         unitTile.improvement = improvementName
                         unitTile.improvementInProgress = null
                         unitTile.turnsToImprovement = 0
@@ -375,13 +380,13 @@ object UnitActions {
                         addGoldPerGreatPersonUsage(unit.civInfo)
                         unit.destroy()
                     }.takeIf { unit.currentMovement > 0f && !tile.isWater &&
-                            !tile.isCityCenter() && !tile.getLastTerrain().impassable &&
+                            !tile.isCityCenter() && !tile.isImpassible() &&
                             tile.improvement != improvementName &&
                             // citadel can be built only next to or within own borders
                             (improvementName != Constants.citadel ||
                                     tile.neighbors.any { it.getOwner() == unit.civInfo })})
         }
-        return null
+        return finalActions
     }
 
     private fun takeOverTilesAround(unit: MapUnit) {
@@ -398,13 +403,14 @@ object UnitActions {
             val otherCiv = tile.getOwner()
             if (otherCiv != null) {
                 // decrease relations for -10 pt/tile
+                if(!otherCiv.knows(unit.civInfo)) otherCiv.meetCivilization(unit.civInfo)
                 otherCiv.getDiplomacyManager(unit.civInfo).addModifier(DiplomaticModifiers.StealingTerritory, -10f)
                 notifications.add(otherCiv)
             }
             nearestCity!!.expansion.takeOwnership(tile)
         }
         for (otherCiv in notifications)
-            otherCiv.addNotification("${unit.civInfo} has stolen your territory!", unit.currentTile.position, Color.RED)
+            otherCiv.addNotification("[${unit.civInfo}] has stolen your territory!", unit.currentTile.position, Color.RED)
     }
 
     private fun addGoldPerGreatPersonUsage(civInfo: CivilizationInfo) {

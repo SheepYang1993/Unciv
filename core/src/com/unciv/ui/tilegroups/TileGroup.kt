@@ -67,7 +67,8 @@ open class TileGroup(var tileInfo: TileInfo, var tileSetStrings:TileSetStrings) 
 
     val unitLayerGroup = Group().apply { isTransform = false; setSize(groupSize, groupSize);touchable = Touchable.disabled }
 
-    val cityButtonLayerGroup = Group().apply { isTransform = true; setSize(groupSize, groupSize);touchable = Touchable.childrenOnly }
+    val cityButtonLayerGroup = Group().apply { isTransform = true; setSize(groupSize, groupSize);
+        touchable = Touchable.childrenOnly; setOrigin(Align.center) }
 
     val circleCrosshairFogLayerGroup = Group().apply { isTransform = false; setSize(groupSize, groupSize) }
     private val circleImage = ImageGetter.getCircle() // for blue and red circles on the tile
@@ -138,9 +139,21 @@ open class TileGroup(var tileInfo: TileInfo, var tileSetStrings:TileSetStrings) 
         if (viewingCiv==null  && !showEntireMap) return listOf(tileSetStrings.hexagon)
 
         if (tileInfo.isCityCenter()) {
-            val terrainAndCity = tileSetStrings.getCityTile(tileInfo.baseTerrain)
+            // Temporarily disabled until we can see the rivers behind the era cities =)
+//            val era = tileInfo.getOwner()!!.getEra()
+//            val terrainAndCityWithEra = tileSetStrings.getCityTile(tileInfo.baseTerrain, era)
+//            if (ImageGetter.imageExists(terrainAndCityWithEra))
+//                return listOf(terrainAndCityWithEra)
+//
+//            val cityWithEra = tileSetStrings.getCityTile(null, era)
+//            if (ImageGetter.imageExists(cityWithEra))
+//                return listOf(cityWithEra)
+
+            val terrainAndCity = tileSetStrings.getCityTile(tileInfo.baseTerrain, null)
             if (ImageGetter.imageExists(terrainAndCity))
                 return listOf(terrainAndCity)
+
+//            val cityWithEra = tileSetStrings.getCityTile()
             if (ImageGetter.imageExists(tileSetStrings.cityTile))
                 return listOf(tileSetStrings.cityTile)
         }
@@ -241,21 +254,21 @@ open class TileGroup(var tileInfo: TileInfo, var tileSetStrings:TileSetStrings) 
         val identifier = tileBaseImageLocations.joinToString(";")
         if (identifier == tileImagesIdentifier) return
 
-        for(image in tileBaseImages) image.remove()
+        for (image in tileBaseImages) image.remove()
         tileBaseImages.clear()
-        for(location in tileBaseImageLocations.reversed()) { // reversed because we send each one to back
+        for (location in tileBaseImageLocations.reversed()) { // reversed because we send each one to back
             // Here we check what actual tiles exist, and pick one - not at random, but based on the tile location,
             // so it stays consistent throughout the game
             val existingImages = ArrayList<String>()
             existingImages.add(location)
-            var i=2
-            while (true){
-                val tileVariant = location+i
-                if(ImageGetter.imageExists(location+i)) existingImages.add(tileVariant)
+            var i = 2
+            while (true) {
+                val tileVariant = location + i
+                if (ImageGetter.imageExists(tileVariant)) existingImages.add(tileVariant)
                 else break
-                i+=1
+                i += 1
             }
-            val finalLocation = existingImages.random(Random(tileInfo.position.hashCode()+location.hashCode()))
+            val finalLocation = existingImages.random(Random(tileInfo.position.hashCode() + location.hashCode()))
 
             val image = ImageGetter.getImage(finalLocation)
             tileBaseImages.add(image)
@@ -268,7 +281,7 @@ open class TileGroup(var tileInfo: TileInfo, var tileSetStrings:TileSetStrings) 
 
     fun showMilitaryUnit(viewingCiv: CivilizationInfo) = showEntireMap
             || viewingCiv.viewableInvisibleUnitsTiles.contains(tileInfo)
-            || (!tileInfo.hasEnemySubmarine(viewingCiv))
+            || !tileInfo.hasEnemyInvisibleUnit(viewingCiv)
 
     fun isViewable(viewingCiv: CivilizationInfo) = showEntireMap
             || viewingCiv.viewableTiles.contains(tileInfo)
@@ -283,6 +296,8 @@ open class TileGroup(var tileInfo: TileInfo, var tileSetStrings:TileSetStrings) 
 
         val tileIsViewable = viewingCiv == null || isViewable(viewingCiv)
         val showMilitaryUnit = viewingCiv == null || showMilitaryUnit(viewingCiv)
+
+        removeMissingModReferences()
 
         updateTileImage(viewingCiv)
         updateRivers(tileInfo.hasBottomRightRiver, tileInfo.hasBottomRiver, tileInfo.hasBottomLeftRiver)
@@ -303,6 +318,18 @@ open class TileGroup(var tileInfo: TileInfo, var tileSetStrings:TileSetStrings) 
 
         crosshairImage.isVisible = false
         fogImage.isVisible = !(tileIsViewable || showEntireMap)
+    }
+
+    private fun removeMissingModReferences() {
+        val improvementName = tileInfo.improvement
+        if(improvementName != null && improvementName.startsWith("StartingLocation ")){
+            val nationName = improvementName.removePrefix("StartingLocation ")
+            if (!tileInfo.ruleset.nations.containsKey(nationName))
+                tileInfo.improvement = null
+        }
+
+        for (unit in tileInfo.getUnits())
+            if (!tileInfo.ruleset.nations.containsKey(unit.owner)) unit.removeFromTile()
     }
 
     private fun updateTerrainBaseImage() {

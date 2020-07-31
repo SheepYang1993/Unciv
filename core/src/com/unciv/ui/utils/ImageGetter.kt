@@ -12,7 +12,6 @@ import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.badlogic.gdx.scenes.scene2d.utils.Drawable
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable
 import com.badlogic.gdx.utils.Align
-import com.sun.xml.internal.bind.v2.runtime.reflect.opt.Const
 import com.unciv.Constants
 import com.unciv.models.ruleset.Nation
 import com.unciv.models.ruleset.Ruleset
@@ -150,7 +149,7 @@ object ImageGetter {
     fun getConstructionImage(construction: String): Image {
         if(ruleset.buildings.containsKey(construction)) return getImage("BuildingIcons/$construction")
         if(ruleset.units.containsKey(construction)) return getUnitIcon(construction)
-        if(construction=="Nothing") return getImage("OtherIcons/Stop")
+        if(construction=="Nothing") return getImage("OtherIcons/Sleep")
         return getStatIcon(construction)
     }
 

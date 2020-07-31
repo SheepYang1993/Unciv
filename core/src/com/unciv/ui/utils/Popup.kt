@@ -8,7 +8,6 @@ import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton
 import com.badlogic.gdx.utils.Align
 import com.unciv.Constants
-import com.unciv.models.translations.tr
 
 /**
  * Base class for all Popups, i.e. Tables that get rendered in the middle of a screen and on top of everything else
@@ -40,7 +39,8 @@ open class Popup(val screen: CameraStageBaseScreen): Table(CameraStageBaseScreen
 
     open fun close() {
         remove()
-        if (screen.popups.isNotEmpty()) screen.popups[0].isVisible = true
+        val nextPopup = screen.stage.actors.firstOrNull { it is Popup }
+        if (nextPopup != null) nextPopup.isVisible = true
     }
 
     fun addGoodSizedLabel(text: String, size:Int=18): Cell<Label> {

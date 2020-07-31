@@ -1,12 +1,10 @@
 package com.unciv.ui.worldscreen.mainmenu
 
-import com.unciv.ui.utils.AutoScrollPane as ScrollPane
 import com.badlogic.gdx.Application
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.scenes.scene2d.ui.*
 import com.badlogic.gdx.utils.Array
-import com.unciv.UncivGame
 import com.unciv.logic.civilization.PlayerType
 import com.unciv.models.UncivSound
 import com.unciv.models.translations.TranslationFileWriter
@@ -16,11 +14,12 @@ import com.unciv.ui.utils.*
 import com.unciv.ui.worldscreen.WorldScreen
 import java.util.*
 import kotlin.concurrent.thread
+import com.unciv.ui.utils.AutoScrollPane as ScrollPane
 
 class Language(val language:String, val percentComplete:Int){
     override fun toString(): String {
         val spaceSplitLang = language.replace("_"," ")
-        return "$spaceSplitLang- $percentComplete%"
+        return "$spaceSplitLang - $percentComplete%"
     }
 }
 
@@ -119,6 +118,9 @@ class WorldScreenOptionsPopup(val worldScreen:WorldScreen) : Popup(worldScreen) 
 
         addHeader("Other options")
 
+        addYesNoRow("Extended map editor", settings.extendedMapEditor) { settings.extendedMapEditor = it }
+        addYesNoRow("Experimental spectator mode", settings.spectatorMode) { settings.spectatorMode = it }
+
         addSoundEffectsVolumeSlider()
         addMusicVolumeSlider()
         addTranslationGeneration()
@@ -139,12 +141,12 @@ class WorldScreenOptionsPopup(val worldScreen:WorldScreen) : Popup(worldScreen) 
                                 {
                                     settings.userId = clipboardContents
                                     settings.save()
-                                    idSetLabel.setFontColor(Color.WHITE).setText("ID successfully set!")
+                                    idSetLabel.setFontColor(Color.WHITE).setText("ID successfully set!".tr())
                                 }).open(true)
                         idSetLabel.isVisible = true
                     } catch (ex: Exception) {
                         idSetLabel.isVisible = true
-                        idSetLabel.setFontColor(Color.RED).setText("Invalid ID!")
+                        idSetLabel.setFontColor(Color.RED).setText("Invalid ID!".tr())
                     }
                 }
         innerTable.add(takeUserIdFromClipboardButton).pad(5f).colspan(2).row()
@@ -220,19 +222,24 @@ class WorldScreenOptionsPopup(val worldScreen:WorldScreen) : Popup(worldScreen) 
             innerTable.add(errorTable).colspan(2).row()
 
             downloadMusicButton.onClick {
+                downloadMusicButton.disable()
+                errorTable.clear()
+                errorTable.add("Downloading...".toLabel())
+
                 // So the whole game doesn't get stuck while downloading the file
                 thread(name = "Music") {
                     try {
-                        downloadMusicButton.disable()
-                        errorTable.clear()
-                        errorTable.add("Downloading...".toLabel())
                         val file = DropBox.downloadFile("/Music/thatched-villagers.mp3")
                         musicLocation.write(file, false)
-                        rebuildInnerTable()
-                        worldScreen.game.startMusic()
+                        Gdx.app.postRunnable {
+                            rebuildInnerTable()
+                            worldScreen.game.startMusic()
+                        }
                     } catch (ex: Exception) {
-                        errorTable.clear()
-                        errorTable.add("Could not download music!".toLabel(Color.RED))
+                        Gdx.app.postRunnable {
+                            errorTable.clear()
+                            errorTable.add("Could not download music!".toLabel(Color.RED))
+                        }
                     }
                 }
             }
@@ -334,7 +341,6 @@ class WorldScreenOptionsPopup(val worldScreen:WorldScreen) : Popup(worldScreen) 
     private fun selectLanguage() {
         settings.language = selectedLanguage
         worldScreen.game.translations.tryReadTranslationForCurrentLanguage()
-        CameraStageBaseScreen.resetFonts() // to load chinese characters if necessary
         reloadWorldAndOptions()
     }
 

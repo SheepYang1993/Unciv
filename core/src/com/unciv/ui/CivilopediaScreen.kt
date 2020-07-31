@@ -27,8 +27,10 @@ class CivilopediaScreen(ruleset: Ruleset) : CameraStageBaseScreen() {
 
     fun select(category: String) {
         entrySelectTable.clear()
-        for (entry in categoryToEntries[category]!!
-                .sortedBy { it.name.tr() }){  // Alphabetical order of localized names
+        var entries = categoryToEntries[category]!!
+        if(category!="Difficulty levels") // this is the only case where we need them in order
+                entries = entries.sortedBy { it.name.tr() }   // Alphabetical order of localized names
+        for (entry in entries){
             val entryButton = Button(skin)
             if(entry.image!=null)
                 if (category=="Terrains")
@@ -46,23 +48,21 @@ class CivilopediaScreen(ruleset: Ruleset) : CameraStageBaseScreen() {
     init {
         onBackButtonClicked { UncivGame.Current.setWorldScreen() }
 
-        val tileSetStrings = TileSetStrings()
-
         categoryToEntries["Buildings"] = ruleset.buildings.values
                 .map { CivilopediaEntry(it.name,it.getDescription(false, null,ruleset),
-                        ImageGetter.getConstructionImage(it.name)) }
+                        ImageGetter.getConstructionImage(it.name).surroundWithCircle(50f)) }
         categoryToEntries["Resources"] = ruleset.tileResources.values
                 .map { CivilopediaEntry(it.name,it.getDescription(ruleset),
                         ImageGetter.getResourceImage(it.name,50f)) }
         categoryToEntries["Terrains"] = ruleset.terrains.values
                 .map { CivilopediaEntry(it.name,it.getDescription(ruleset),
-                        terrainImage(it, ruleset, tileSetStrings) ) }
+                        terrainImage(it, ruleset) ) }
         categoryToEntries["Tile Improvements"] = ruleset.tileImprovements.values
                 .map { CivilopediaEntry(it.name,it.getDescription(ruleset,false),
                         ImageGetter.getImprovementIcon(it.name,50f)) }
         categoryToEntries["Units"] = ruleset.units.values
                 .map { CivilopediaEntry(it.name,it.getDescription(false),
-                        ImageGetter.getConstructionImage(it.name)) }
+                        ImageGetter.getConstructionImage(it.name).surroundWithCircle(50f)) }
         categoryToEntries["Nations"] = ruleset.nations.values
                 .filter { it.isMajorCiv() }
                 .map { CivilopediaEntry(it.name,it.getUniqueString(ruleset,false),
@@ -76,6 +76,9 @@ class CivilopediaScreen(ruleset: Ruleset) : CameraStageBaseScreen() {
 
         categoryToEntries["Tutorials"] = tutorialController.getCivilopediaTutorials()
                 .map { CivilopediaEntry(it.key.replace("_"," "), it.value.joinToString("\n\n") { line -> line.tr() }) }
+
+        categoryToEntries["Difficulty levels"] = ruleset.difficulties.values
+                .map { CivilopediaEntry(it.name, it.getDescription()) }
 
         val buttonTable = Table()
         buttonTable.pad(15f)
@@ -92,6 +95,7 @@ class CivilopediaScreen(ruleset: Ruleset) : CameraStageBaseScreen() {
         buttonTable.pack()
         buttonTable.width = stage.width
         val buttonTableScroll = ScrollPane(buttonTable)
+        buttonTableScroll.setScrollingDisabled(false, true)
 
         val goToGameButton = Constants.close.toTextButton()
         goToGameButton.onClick {
@@ -103,7 +107,6 @@ class CivilopediaScreen(ruleset: Ruleset) : CameraStageBaseScreen() {
         topTable.add(goToGameButton).pad(10f)
         topTable.add(buttonTableScroll)
         topTable.pack()
-        //buttonTable.height = topTable.height
 
         val entryTable = Table()
         val splitPane = SplitPane(topTable, entryTable, true, skin)
@@ -130,7 +133,7 @@ class CivilopediaScreen(ruleset: Ruleset) : CameraStageBaseScreen() {
         select("Tutorials")
     }
 
-    private fun terrainImage (terrain: Terrain, ruleset: Ruleset, tileSetStrings: TileSetStrings ): Actor? {
+    private fun terrainImage (terrain: Terrain, ruleset: Ruleset): Actor? {
         val tileInfo = TileInfo()
         tileInfo.ruleset = ruleset
         when(terrain.type) {
@@ -151,11 +154,6 @@ class CivilopediaScreen(ruleset: Ruleset) : CameraStageBaseScreen() {
         group.forMapEditorIcon = true
         group.update()
         return group
-//        val wrapper = Table()
-//        wrapper.add(group).pad(24f)
-//        wrapper.pad(2f,24f,2f,24f)
-//        wrapper.debug = true
-//        return wrapper
     }
 }
 

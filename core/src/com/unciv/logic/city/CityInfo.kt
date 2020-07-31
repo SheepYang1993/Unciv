@@ -9,6 +9,7 @@ import com.unciv.logic.battle.Battle
 import com.unciv.logic.civilization.CivilizationInfo
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.civilization.diplomacy.DiplomaticModifiers
+import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
 import com.unciv.logic.map.RoadStatus
 import com.unciv.logic.map.TileInfo
 import com.unciv.logic.map.TileMap
@@ -19,6 +20,7 @@ import com.unciv.models.ruleset.tile.ResourceSupplyList
 import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.models.ruleset.unit.BaseUnit
 import com.unciv.models.stats.Stats
+import com.unciv.models.translations.getPlaceholderParameters
 import com.unciv.ui.utils.withoutItem
 import java.util.*
 import kotlin.collections.HashMap
@@ -136,7 +138,7 @@ class CityInfo {
 
     fun getCenterTile(): TileInfo = centerTileInfo
     fun getTiles(): Sequence<TileInfo> = tiles.asSequence().map { tileMap[it] }
-    fun getWorkableTiles() = getTiles().filter { it in tilesInRange }
+    fun getWorkableTiles() = tilesInRange.asSequence().filter { it.getOwner() == civInfo }
 
     fun isCapital() = cityConstructions.isBuilt("Palace")
     fun isConnectedToCapital(connectionTypePredicate: (Set<String>) -> Boolean = {true}): Boolean {
@@ -184,9 +186,9 @@ class CityInfo {
         if (resource.revealedBy!=null && !civInfo.tech.isResearched(resource.revealedBy!!)) return 0
 
         // Even if the improvement exists (we conquered an enemy city or somesuch) or we have a city on it, we won't get the resource until the correct tech is researched
-        if (resource.improvement!=null){
+        if (resource.improvement!=null) {
             val improvement = getRuleset().tileImprovements[resource.improvement!!]!!
-            if(improvement.techRequired!=null && !civInfo.tech.isResearched(improvement.techRequired!!)) return 0
+            if (improvement.techRequired != null && !civInfo.tech.isResearched(improvement.techRequired!!)) return 0
         }
 
         if (resource.improvement == tileInfo.improvement || tileInfo.isCityCenter()
@@ -244,28 +246,26 @@ class CityInfo {
     fun getBuildingUniques(): Sequence<String> = cityConstructions.getBuiltBuildings().flatMap { it.uniques.asSequence() }
     fun containsBuildingUnique(unique:String) = cityConstructions.getBuiltBuildings().any { it.uniques.contains(unique) }
 
-    fun getGreatPersonMap():HashMap<String,Stats>{
-        val stats = HashMap<String,Stats>()
-        if(population.specialists.toString()!="")
+    fun getGreatPersonMap():HashMap<String,Stats> {
+        val stats = HashMap<String, Stats>()
+        if (population.specialists.toString() != "")
             stats["Specialists"] = population.specialists.times(3f)
 
         val buildingStats = Stats()
         for (building in cityConstructions.getBuiltBuildings())
             if (building.greatPersonPoints != null)
                 buildingStats.add(building.greatPersonPoints!!)
-        if(buildingStats.toString()!="")
+        if (buildingStats.toString() != "")
             stats["Buildings"] = buildingStats
 
-        for(entry in stats){
-            if(civInfo.nation.unique == UniqueAbility.INGENUITY)
+        for (entry in stats) {
+            if (civInfo.nation.unique == UniqueAbility.INGENUITY)
                 entry.value.science *= 1.5f
-            if (civInfo.policies.hasEffect("Great Merchants are earned 25% faster, +1 Science from every Mint, Market, Bank and Stock Exchange."))
+            if (civInfo.hasUnique("Great Merchants are earned 25% faster"))
                 entry.value.gold *= 1.25f
 
-            if (civInfo.containsBuildingUnique("+33% great person generation in all cities"))
-                stats[entry.key] = stats[entry.key]!!.times(1.33f)
-            if (civInfo.policies.hasEffect("+25% great people rate"))
-                stats[entry.key] = stats[entry.key]!!.times(1.25f)
+            for (unique in civInfo.getMatchingUniques("+[]% great person generation in all cities"))
+                stats[entry.key] = stats[entry.key]!!.times(1 + (unique.getPlaceholderParameters()[0].toFloat() / 100))
         }
 
         return stats
@@ -372,7 +372,8 @@ class CityInfo {
         isPuppet = false
         cityConstructions.inProgressConstructions.clear() // undo all progress of the previous civ on units etc.
         cityStats.update()
-        UncivGame.Current.worldScreen.shouldUpdate = true
+        if (!UncivGame.Current.consoleMode)
+            UncivGame.Current.worldScreen.shouldUpdate = true
     }
 
     /** This happens when we either puppet OR annex, basically whenever we conquer a city and don't liberate it */
@@ -390,7 +391,6 @@ class CityInfo {
 
         moveToCiv(conqueringCiv)
         Battle.destroyIfDefeated(oldCiv, conqueringCiv)
-
 
         if(population.population>1) population.population -= 1 + population.population/4 // so from 2-4 population, remove 1, from 5-8, remove 2, etc.
         reassignPopulation()
@@ -437,20 +437,31 @@ class CityInfo {
             return
         }
 
-
-        diplomaticRepercussionsForLiberatingCity(conqueringCiv)
+        val oldCiv = civInfo
 
         val foundingCiv = civInfo.gameInfo.civilizations.first { it.civName == foundingCiv }
+        if (foundingCiv.isDefeated()) // resurrected civ
+            for (diploManager in foundingCiv.diplomacy.values)
+                if (diploManager.diplomaticStatus == DiplomaticStatus.War)
+                    diploManager.makePeace()
 
+        diplomaticRepercussionsForLiberatingCity(conqueringCiv)
         moveToCiv(foundingCiv)
-        health = getMaxHealth() / 2 // I think that cities recover to half health when conquered?
+        Battle.destroyIfDefeated(oldCiv, conqueringCiv)
 
+        health = getMaxHealth() / 2 // I think that cities recover to half health when conquered?
         reassignPopulation()
 
-        if(foundingCiv.cities.size == 1) cityConstructions.addBuilding("Palace") // Resurrection!
+        if (foundingCiv.cities.size == 1) cityConstructions.addBuilding("Palace") // Resurrection!
         isPuppet = false
         cityStats.update()
-        UncivGame.Current.worldScreen.shouldUpdate=true
+
+        // Move units out of the city when liberated
+        for (unit in getTiles().flatMap { it.getUnits() }.toList())
+            if (!unit.movement.canPassThrough(unit.currentTile))
+                unit.movement.teleportToClosestMoveableTile()
+
+        UncivGame.Current.worldScreen.shouldUpdate = true
     }
 
     private fun diplomaticRepercussionsForLiberatingCity(conqueringCiv: CivilizationInfo) {
@@ -526,18 +537,6 @@ class CityInfo {
         }
 
         tryUpdateRoadStatus()
-    }
-
-    // Acquiring in this context means transferring ownership to another city of the same civ
-    fun canAcquireTile(newTileInfo: TileInfo): Boolean {
-        val owningCity = newTileInfo.getCity()
-        if (owningCity!=null && owningCity!=this
-                && newTileInfo.getOwner()!!.isCurrentPlayer()
-                && newTileInfo.aerialDistanceTo(getCenterTile()) <= 3
-                && newTileInfo.neighbors.any{it.getCity()==this}) {
-            return true
-        }
-        return false
     }
 
     private fun tryUpdateRoadStatus(){

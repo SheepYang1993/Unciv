@@ -68,6 +68,10 @@ class MultiplayerScreen(previousScreen: CameraStageBaseScreen) : PickerScreen() 
         topTable.add(mainTable).row()
         scrollPane.setScrollingDisabled(false, true)
 
+        rightSideTable.defaults().uniformX()
+        rightSideTable.defaults().fillX()
+        rightSideTable.defaults().pad(10.0f)
+
         // leftTable Setup
         reloadGameListUI()
 
@@ -79,30 +83,30 @@ class MultiplayerScreen(previousScreen: CameraStageBaseScreen) : PickerScreen() 
             Gdx.app.clipboard.contents = game.settings.userId
             ResponsePopup("UserID copied to clipboard".tr(), this)
         }
-        rightSideTable.add(copyUserIdButton).pad(10f).padBottom(30f).row()
+        rightSideTable.add(copyUserIdButton).padBottom(30f).row()
 
         copyGameIdButton.onClick {
             Gdx.app.clipboard.contents = selectedGame.gameId
             ResponsePopup("GameID copied to clipboard".tr(), this)
         }
-        rightSideTable.add(copyGameIdButton).pad(10f).row()
+        rightSideTable.add(copyGameIdButton).row()
 
         editButton.onClick {
             game.setScreen(EditMultiplayerGameInfoScreen(selectedGame, selectedGameName, this))
             //game must be unselected in case the game gets deleted inside the EditScreen
             unselectGame()
         }
-        rightSideTable.add(editButton).pad(10f).row()
+        rightSideTable.add(editButton).row()
 
         addGameButton.onClick {
             game.setScreen(AddMultiplayerGameScreen(this))
         }
-        rightSideTable.add(addGameButton).pad(10f).padBottom(30f).row()
+        rightSideTable.add(addGameButton).padBottom(30f).row()
 
         refreshButton.onClick {
             redownloadAllGames()
         }
-        rightSideTable.add(refreshButton).pad(10f).row()
+        rightSideTable.add(refreshButton).row()
 
         //RightSideButton Setup
         rightSideButton.setText("Join Game".tr())
@@ -131,9 +135,9 @@ class MultiplayerScreen(previousScreen: CameraStageBaseScreen) : PickerScreen() 
             return
         }
 
+        addGameButton.setText("Working...".tr())
+        addGameButton.disable()
         thread(name="MultiplayerDownload") {
-            addGameButton.setText("Working...".tr())
-            addGameButton.disable()
             try {
                 // The tryDownload can take more than 500ms. Therefore, to avoid ANRs,
                 // we need to run it in a different thread.
@@ -143,16 +147,20 @@ class MultiplayerScreen(previousScreen: CameraStageBaseScreen) : PickerScreen() 
                 else
                     GameSaver.saveGame(game, gameName, true)
 
-                reloadGameListUI()
+                Gdx.app.postRunnable { reloadGameListUI() }
             } catch (ex: Exception) {
-                val errorPopup = Popup(this)
-                errorPopup.addGoodSizedLabel("Could not download game!".tr())
-                errorPopup.row()
-                errorPopup.addCloseButton()
-                errorPopup.open()
+                Gdx.app.postRunnable {
+                    val errorPopup = Popup(this)
+                    errorPopup.addGoodSizedLabel("Could not download game!".tr())
+                    errorPopup.row()
+                    errorPopup.addCloseButton()
+                    errorPopup.open()
+                }
             }
-            addGameButton.setText(addGameText)
-            addGameButton.enable()
+            Gdx.app.postRunnable {
+                addGameButton.setText(addGameText)
+                addGameButton.enable()
+            }
         }
     }
 
@@ -175,14 +183,14 @@ class MultiplayerScreen(previousScreen: CameraStageBaseScreen) : PickerScreen() 
     }
 
     //reloads all gameFiles to refresh UI
-    fun reloadGameListUI(){
+    fun reloadGameListUI() {
         val leftSubTable = Table()
         val gameSaver = GameSaver
-        val savedGames : List<String>?
+        val savedGames: Sequence<String>
 
         try {
             savedGames = gameSaver.getSaves(true)
-        }catch (ex: Exception) {
+        } catch (ex: Exception) {
             val errorPopup = Popup(this)
             errorPopup.addGoodSizedLabel("Could not refresh!".tr())
             errorPopup.row()
@@ -202,7 +210,7 @@ class MultiplayerScreen(previousScreen: CameraStageBaseScreen) : PickerScreen() 
 
                 if (isUsersTurn(game)) {
                     gameTable.add(ImageGetter.getNationIndicator(game.currentPlayerCiv.nation, 45f))
-                }else{
+                } else {
                     gameTable.add()
                 }
 
@@ -224,7 +232,7 @@ class MultiplayerScreen(previousScreen: CameraStageBaseScreen) : PickerScreen() 
 
                 gameTable.add(gameButton).pad(5f).row()
                 leftSubTable.add(gameTable).row()
-            }catch (ex: Exception) {
+            } catch (ex: Exception) {
                 //skipping one save is not fatal
                 ResponsePopup("Could not refresh!".tr(), this)
                 continue
@@ -250,17 +258,21 @@ class MultiplayerScreen(previousScreen: CameraStageBaseScreen) : PickerScreen() 
                 } catch (ex: Exception) {
                     //skipping one is not fatal
                     //Trying to use as many prev. used strings as possible
-                    ResponsePopup("Could not download game!".tr() + " ${multiplayerGameList.getValue(gameId)}", this)
+                    Gdx.app.postRunnable {
+                        ResponsePopup("Could not download game!".tr() + " ${multiplayerGameList.getValue(gameId)}", this)
+                    }
                     continue
                 }
             }
 
             //Reset UI
-            addGameButton.enable()
-            refreshButton.setText(refreshText)
-            refreshButton.enable()
-            unselectGame()
-            reloadGameListUI()
+            Gdx.app.postRunnable {
+                addGameButton.enable()
+                refreshButton.setText(refreshText)
+                refreshButton.enable()
+                unselectGame()
+                reloadGameListUI()
+            }
         }
     }
 

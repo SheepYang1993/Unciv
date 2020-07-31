@@ -25,7 +25,7 @@ class ConstructionAutomation(val cityConstructions: CityConstructions){
 
     val civUnits = civInfo.getCivUnits()
     val militaryUnits = civUnits.filter { !it.type.isCivilian()}.count()
-    val workers = civUnits.filter { it.name == Constants.worker }.count().toFloat()
+    val workers = civUnits.filter { it.hasUnique(Constants.workerUnique) }.count().toFloat()
     val cities = civInfo.cities.size
     val canBuildWorkboat = cityInfo.cityConstructions.getConstructableUnits().map { it.name }.contains("Work Boats")
             && !cityInfo.getTiles().any { it.civilianUnit?.name == "Work Boats" }
@@ -119,15 +119,17 @@ class ConstructionAutomation(val cityConstructions: CityConstructions){
     }
 
     private fun addWorkerChoice() {
-        if(!civInfo.gameInfo.ruleSet.units.containsKey(Constants.worker)) return // for mods
-        if(civInfo.getIdleUnits().any { it.name==Constants.worker && it.action== Constants.unitActionAutomation})
+        val workerEquivalents = civInfo.gameInfo.ruleSet.units.values
+                .filter { it.uniques.contains(Constants.workerUnique) && it.isBuildable(cityConstructions) }
+        if (workerEquivalents.isEmpty()) return // for mods with no worker units
+        if (civInfo.getIdleUnits().any { it.action == Constants.unitActionAutomation && it.hasUnique(Constants.workerUnique) })
             return // If we have automated workers who have no work to do then it's silly to construct new workers.
 
         val citiesCountedTowardsWorkers = min(5, cities) // above 5 cities, extra cities won't make us want more workers
-        if (workers < citiesCountedTowardsWorkers * 0.6f && civUnits.none { it.name==Constants.worker && it.isIdle() }) {
+        if (workers < citiesCountedTowardsWorkers * 0.6f && civUnits.none { it.hasUnique(Constants.workerUnique) && it.isIdle() }) {
             var modifier = citiesCountedTowardsWorkers / (workers + 0.1f)
             if (!cityIsOverAverageProduction) modifier /= 5 // higher production cities will deal with this
-            addChoice(relativeCostEffectiveness, Constants.worker, modifier)
+            addChoice(relativeCostEffectiveness, workerEquivalents.minBy { it.cost }!!.name, modifier)
         }
     }
 
@@ -147,8 +149,8 @@ class ConstructionAutomation(val cityConstructions: CityConstructions){
         val spaceshipPart = buildableNotWonders.firstOrNull { it.uniques.contains("Spaceship part") }
         if (spaceshipPart != null) {
             var modifier = 1.5f
-            if(cityInfo.cityStats.currentCityStats.culture==0f) // It won't grow if we don't help it
-                modifier=0.8f
+            if (cityInfo.cityStats.currentCityStats.culture == 0f) // It won't grow if we don't help it
+                modifier = 0.8f
             if (preferredVictoryType == VictoryType.Scientific) modifier = 2f
             addChoice(relativeCostEffectiveness, spaceshipPart.name, modifier)
         }
@@ -162,34 +164,36 @@ class ConstructionAutomation(val cityConstructions: CityConstructions){
         }
     }
 
-    private fun addWondersChoice() {
-        if (buildableWonders.any()) {
-            fun getWonderPriority(wonder: Building): Float {
-                if (preferredVictoryType == VictoryType.Cultural
-                        && wonder.name in listOf("Sistine Chapel", "Eiffel Tower", "Cristo Redentor", "Neuschwanstein", "Sydney Opera House"))
-                    return 3f
-                if (wonder.isStatRelated(Stat.Science)) {
-                    if (preferredVictoryType == VictoryType.Scientific) return 1.5f
-                    else return 1.3f
-                }
-                if (wonder.name == "Manhattan Project") {
-                    if (preferredVictoryType == VictoryType.Domination) return 2f
-                    else return 1.3f
-                }
-                if (wonder.isStatRelated(Stat.Happiness)) return 1.2f
-                if (wonder.isStatRelated(Stat.Production)) return 1.1f
-                return 1f
-            }
-
-            val highestPriorityWonder = buildableWonders
-                    .maxBy { getWonderPriority(it) }!!
-            val citiesBuildingWonders = civInfo.cities
-                    .count { it.cityConstructions.isBuildingWonder() }
-
-            var modifier = 2f * getWonderPriority(highestPriorityWonder) / (citiesBuildingWonders + 1)
-            if (!cityIsOverAverageProduction) modifier /= 5  // higher production cities will deal with this
-            addChoice(relativeCostEffectiveness, highestPriorityWonder.name, modifier)
+    private fun getWonderPriority(wonder: Building): Float {
+        if(wonder.uniques.contains("Enables construction of Spaceship parts"))
+            return 2f
+        if (preferredVictoryType == VictoryType.Cultural
+                && wonder.name in listOf("Sistine Chapel", "Eiffel Tower", "Cristo Redentor", "Neuschwanstein", "Sydney Opera House"))
+            return 3f
+        if (wonder.isStatRelated(Stat.Science)) {
+            if (preferredVictoryType == VictoryType.Scientific) return 1.5f
+            else return 1.3f
         }
+        if (wonder.name == "Manhattan Project") {
+            if (preferredVictoryType == VictoryType.Domination) return 2f
+            else return 1.3f
+        }
+        if (wonder.isStatRelated(Stat.Happiness)) return 1.2f
+        if (wonder.isStatRelated(Stat.Production)) return 1.1f
+        return 1f
+    }
+
+    private fun addWondersChoice() {
+        if (!buildableWonders.any()) return
+
+        val highestPriorityWonder = buildableWonders
+                .maxBy { getWonderPriority(it) }!!
+        val citiesBuildingWonders = civInfo.cities
+                .count { it.cityConstructions.isBuildingWonder() }
+
+        var modifier = 2f * getWonderPriority(highestPriorityWonder) / (citiesBuildingWonders + 1)
+        if (!cityIsOverAverageProduction) modifier /= 5  // higher production cities will deal with this
+        addChoice(relativeCostEffectiveness, highestPriorityWonder.name, modifier)
     }
 
     private fun addUnitTrainingBuildingChoice() {

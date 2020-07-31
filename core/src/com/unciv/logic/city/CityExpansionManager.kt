@@ -26,7 +26,6 @@ class CityExpansionManager {
                 .map { it.position }
         return cityInfo.tiles.count { it != cityInfo.location && it !in tilesAroundCity}
     }
-    fun isAreaMaxed(): Boolean = cityInfo.tiles.size >= 90
 
     // This one has conflicting sources -
     // http://civilization.wikia.com/wiki/Mathematics_of_Civilization_V says it's 20+(10(t-1))^1.1
@@ -35,11 +34,11 @@ class CityExpansionManager {
     // The second seems to be more based, so I'll go with that
     fun getCultureToNextTile(): Int {
         var cultureToNextTile = 6 * (max(0, tilesClaimed()) + 1.4813).pow(1.3)
-        if (cityInfo.civInfo.containsBuildingUnique("Cost of acquiring new tiles reduced by 25%"))
+        if (cityInfo.civInfo.hasUnique("Cost of acquiring new tiles reduced by 25%"))
             cultureToNextTile *= 0.75 //Speciality of Angkor Wat
         if (cityInfo.containsBuildingUnique("Culture and Gold costs of acquiring new tiles reduced by 25% in this city"))
             cultureToNextTile *= 0.75 // Specialty of Krepost
-        if (cityInfo.civInfo.policies.isAdopted("Tradition")) cultureToNextTile *= 0.75
+        if (cityInfo.civInfo.hasUnique("Increased rate of border expansion")) cultureToNextTile *= 0.75
         return cultureToNextTile.roundToInt()
     }
 
@@ -57,7 +56,7 @@ class CityExpansionManager {
         val distanceFromCenter = tileInfo.aerialDistanceTo(cityInfo.getCenterTile())
         var cost = baseCost * (distanceFromCenter - 1) + tilesClaimed() * 5.0
 
-        if (cityInfo.civInfo.containsBuildingUnique("Cost of acquiring new tiles reduced by 25%"))
+        if (cityInfo.civInfo.hasUnique("Cost of acquiring new tiles reduced by 25%"))
             cost *= 0.75 //Speciality of Angkor Wat
         if (cityInfo.containsBuildingUnique("Culture and Gold costs of acquiring new tiles reduced by 25% in this city"))
             cost *= 0.75 // Specialty of Krepost
@@ -98,10 +97,6 @@ class CityExpansionManager {
     }
 
     private fun addNewTileWithCulture(): Boolean {
-        if (isAreaMaxed()) {
-            cultureStored = 0
-            return false
-        }
         val chosenTile = chooseNewTileToOwn()
         if (chosenTile != null) {
             cultureStored -= getCultureToNextTile()
@@ -113,8 +108,15 @@ class CityExpansionManager {
 
     fun relinquishOwnership(tileInfo: TileInfo) {
         cityInfo.tiles = cityInfo.tiles.withoutItem(tileInfo.position)
-        if (cityInfo.workedTiles.contains(tileInfo.position))
-            cityInfo.workedTiles = cityInfo.workedTiles.withoutItem(tileInfo.position)
+        for (city in cityInfo.civInfo.cities) {
+            if (city.workedTiles.contains(tileInfo.position)) {
+                city.workedTiles = city.workedTiles.withoutItem(tileInfo.position)
+                city.population.autoAssignPopulation()
+            }
+            if (city.lockedTiles.contains(tileInfo.position))
+                city.lockedTiles.remove(tileInfo.position)
+        }
+
         tileInfo.owningCity = null
 
         cityInfo.civInfo.updateDetailedCivResources()

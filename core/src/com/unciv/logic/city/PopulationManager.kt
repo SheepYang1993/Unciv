@@ -74,22 +74,22 @@ class PopulationManager {
     // if small city, favor production above all, ignore gold!
     // if larger city, food should be worth less!
     internal fun autoAssignPopulation(foodWeight: Float = 1f) {
-        if(getFreePopulation()==0) return
+        if (getFreePopulation() == 0) return
 
         //evaluate tiles
         val bestTile: TileInfo? = cityInfo.getTiles()
                 .filter { it.aerialDistanceTo(cityInfo.getCenterTile()) <= 3 }
-                .filterNot { cityInfo.workedTiles.contains(it.position) || cityInfo.location==it.position}
-                .maxBy { Automation.rankTileForCityWork(it,cityInfo, foodWeight) }
-        val valueBestTile = if(bestTile==null) 0f
+                .filterNot { it.isWorked() || cityInfo.location == it.position }
+                .maxBy { Automation.rankTileForCityWork(it, cityInfo, foodWeight) }
+        val valueBestTile = if (bestTile == null) 0f
         else Automation.rankTileForCityWork(bestTile, cityInfo, foodWeight)
 
         //evaluate specialists
         val maxSpecialistsMap = getMaxSpecialists().toHashMap()
         val policies = cityInfo.civInfo.policies.adoptedPolicies
         val bestJob: Stat? = specialists.toHashMap()
-                .filter {maxSpecialistsMap.containsKey(it.key) && it.value < maxSpecialistsMap[it.key]!!}
-                .map {it.key}
+                .filter { maxSpecialistsMap.containsKey(it.key) && it.value < maxSpecialistsMap[it.key]!! }
+                .map { it.key }
                 .maxBy { Automation.rankSpecialist(cityInfo.cityStats.getStatsOfSpecialist(it, policies), cityInfo) }
         var valueBestSpecialist = 0f
         if (bestJob != null) {
@@ -101,18 +101,14 @@ class PopulationManager {
         if (valueBestTile > valueBestSpecialist) {
             if (bestTile != null)
                 cityInfo.workedTiles = cityInfo.workedTiles.withItem(bestTile.position)
-        } else {
-            if (bestJob != null) {
-                specialists.add(bestJob, 1f)
-            }
-        }
+        } else if (bestJob != null) specialists.add(bestJob, 1f)
     }
 
     fun unassignExtraPopulation() {
         for(tile in cityInfo.workedTiles.map { cityInfo.tileMap[it] }) {
-            if (tile.getCity() != cityInfo)
+            if (tile.getOwner() != cityInfo.civInfo || tile.getWorkingCity() != cityInfo)
                 cityInfo.workedTiles = cityInfo.workedTiles.withoutItem(tile.position)
-            if(tile.aerialDistanceTo(cityInfo.getCenterTile()) > 3)
+            if (tile.aerialDistanceTo(cityInfo.getCenterTile()) > 3)
                 cityInfo.workedTiles = cityInfo.workedTiles.withoutItem(tile.position)
         }
 

@@ -1,6 +1,5 @@
 package com.unciv.ui.trade
 
-import com.unciv.ui.utils.AutoScrollPane as ScrollPane
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.scenes.scene2d.ui.SplitPane
 import com.badlogic.gdx.scenes.scene2d.ui.Table
@@ -21,6 +20,7 @@ import com.unciv.logic.trade.TradeType
 import com.unciv.models.translations.tr
 import com.unciv.ui.utils.*
 import kotlin.math.roundToInt
+import com.unciv.ui.utils.AutoScrollPane as ScrollPane
 
 class DiplomacyScreen(val viewingCiv:CivilizationInfo):CameraStageBaseScreen() {
 
@@ -53,7 +53,7 @@ class DiplomacyScreen(val viewingCiv:CivilizationInfo):CameraStageBaseScreen() {
     private fun updateLeftSideTable() {
         leftSideTable.clear()
         for (civ in UncivGame.Current.gameInfo.civilizations
-                .filterNot { it.isDefeated() || it == viewingCiv || it.isBarbarian() }) {
+                .filterNot { it.isDefeated() || it == viewingCiv || it.isBarbarian() || it.isSpectator() }) {
             if (!viewingCiv.knows(civ)) continue
 
             val civIndicator = ImageGetter.getNationIndicator(civ.nation,100f)
@@ -96,8 +96,7 @@ class DiplomacyScreen(val viewingCiv:CivilizationInfo):CameraStageBaseScreen() {
         diplomacyTable.add(("Type: ".tr() + otherCiv.getCityStateType().toString().tr()).toLabel()).row()
         otherCiv.updateAllyCivForCityState()
         val ally = otherCiv.getAllyCiv()
-        if (ally != "")
-        {
+        if (ally != "") {
             val allyString = "{Ally: }{$ally} {Influence: }".tr() +
                     otherCiv.getDiplomacyManager(ally).influence.toString()
             diplomacyTable.add(allyString.toLabel()).row()
@@ -120,7 +119,7 @@ class DiplomacyScreen(val viewingCiv:CivilizationInfo):CameraStageBaseScreen() {
             CityStateType.Militaristic -> "Provides land units every 20 turns at 30 Influence".tr()
         }
 
-        val friendBonusLabelColor:Color
+        val friendBonusLabelColor: Color
         if (otherCivDiplomacyManager.relationshipLevel() >= RelationshipLevel.Friend) {
             friendBonusLabelColor = Color.GREEN
             // RelationshipChange = Ally -> Friend or Friend -> Favorable
@@ -160,10 +159,12 @@ class DiplomacyScreen(val viewingCiv:CivilizationInfo):CameraStageBaseScreen() {
                 }, this).open()
             }
             diplomacyTable.add(peaceButton).row()
-            if(isNotPlayersTurn()) peaceButton.disable()
+            val cityStatesAlly = otherCiv.getAllyCiv()
+            val atWarWithItsAlly = viewingCiv.getKnownCivs().any { it.civName == cityStatesAlly && it.isAtWarWith(viewingCiv) }
+            if (isNotPlayersTurn() || atWarWithItsAlly) peaceButton.disable()
         } else {
             val declareWarButton = getDeclareWarButton(diplomacyManager, otherCiv)
-            if(isNotPlayersTurn()) declareWarButton.disable()
+            if (isNotPlayersTurn()) declareWarButton.disable()
             diplomacyTable.add(declareWarButton).row()
         }
 

@@ -71,7 +71,7 @@ class WorldMapHolder(internal val worldScreen: WorldScreen, internal val tileMap
 
         if (previousSelectedUnit != null && previousSelectedUnit.getTile() != tileInfo
                 && worldScreen.isPlayersTurn
-                && previousSelectedUnit.movement.canMoveTo(tileInfo) && previousSelectedUnit.movement.canReach(tileInfo)) {
+                && previousSelectedUnit.movement.canMoveTo(tileInfo)) {
             // this can take a long time, because of the unit-to-tile calculation needed, so we put it in a different thread
             addTileOverlaysWithUnitMovement(previousSelectedUnit, tileInfo)
         }
@@ -93,6 +93,11 @@ class WorldMapHolder(internal val worldScreen: WorldScreen, internal val tileMap
     }
 
     private fun addTileOverlaysWithUnitMovement(selectedUnit: MapUnit, tileInfo: TileInfo) {
+        // some code is copied from canReach not to call getShortestPath on the main thread before calling it on this thread
+        if (selectedUnit.type.isAirUnit() && selectedUnit.currentTile.aerialDistanceTo(tileInfo) > selectedUnit.getRange()*2) {
+            addTileOverlays(tileInfo)
+            return
+        }
         thread(name="TurnsToGetThere") {
             /** LibGdx sometimes has these weird errors when you try to edit the UI layout from 2 separate threads.
              * And so, all UI editing will be done on the main thread.
@@ -108,8 +113,9 @@ class WorldMapHolder(internal val worldScreen: WorldScreen, internal val tileMap
                     selectedUnit.movement.headTowards(tileInfo)
                     worldScreen.bottomUnitTable.selectedUnit = selectedUnit // keep moved unit selected
                 } else {
-                    // add "move to" button
-                    val moveHereButtonDto = MoveHereButtonDto(selectedUnit, tileInfo, turnsToGetThere)
+                    // add "move to" button if there is a path to tileInfo
+                    val moveHereButtonDto = if (turnsToGetThere != 0) MoveHereButtonDto(selectedUnit, tileInfo, turnsToGetThere)
+                        else null
                     addTileOverlays(tileInfo, moveHereButtonDto)
                 }
                 worldScreen.shouldUpdate = true
@@ -120,13 +126,15 @@ class WorldMapHolder(internal val worldScreen: WorldScreen, internal val tileMap
 
     private fun addTileOverlays(tileInfo: TileInfo, moveHereDto:MoveHereButtonDto?=null){
         val table = Table().apply { defaults().pad(10f) }
-        if(moveHereDto!=null)
+        if(moveHereDto!=null && worldScreen.canChangeState)
             table.add(getMoveHereButton(moveHereDto))
 
         val unitList = ArrayList<MapUnit>()
-        if (tileInfo.isCityCenter() && tileInfo.getOwner()==worldScreen.viewingCiv) {
+        if (tileInfo.isCityCenter()
+                && (tileInfo.getOwner()==worldScreen.viewingCiv || worldScreen.viewingCiv.isSpectator())) {
             unitList.addAll(tileInfo.getCity()!!.getCenterTile().getUnits())
-        } else if (tileInfo.airUnits.isNotEmpty() && tileInfo.airUnits.first().civInfo==worldScreen.viewingCiv) {
+        } else if (tileInfo.airUnits.isNotEmpty()
+                && (tileInfo.airUnits.first().civInfo==worldScreen.viewingCiv || worldScreen.viewingCiv.isSpectator())) {
             unitList.addAll(tileInfo.getUnits())
         }
 
@@ -199,11 +207,10 @@ class WorldMapHolder(internal val worldScreen: WorldScreen, internal val tileMap
     internal fun updateTiles(viewingCiv: CivilizationInfo) {
 
         if (isMapRevealEnabled(viewingCiv)) {
-            viewingCiv.viewableTiles = tileMap.values.toSet()
-
-            // Only needs to be done once
+            // Only needs to be done once - this is so the minimap will also be revealed
             if (viewingCiv.exploredTiles.size != tileMap.values.size)
                 viewingCiv.exploredTiles = tileMap.values.map { it.position }.toHashSet()
+            tileGroups.values.forEach { it.showEntireMap = true } // So we can see all resources, regardless of tech
         }
 
         val playerViewableTilePositions = viewingCiv.viewableTiles.map { it.position }.toHashSet()
@@ -249,7 +256,7 @@ class WorldMapHolder(internal val worldScreen: WorldScreen, internal val tileMap
         val isAirUnit = unit.type.isAirUnit()
         val tilesInMoveRange =
                 if (isAirUnit)
-                    unit.getTile().getTilesInDistance(unit.getRange()*2)
+                    unit.getTile().getTilesInDistanceRange(IntRange(unit.getRange(), unit.getRange() * 2))
                 else
                     unit.movement.getDistanceToTiles().keys.asSequence()
 
@@ -260,6 +267,15 @@ class WorldMapHolder(internal val worldScreen: WorldScreen, internal val tileMap
             if (unit.movement.canMoveTo(tile))
                 tileToColor.showCircle(Color.WHITE,
                         if (UncivGame.Current.settings.singleTapMove || isAirUnit) 0.7f else 0.3f)
+        }
+
+        // Mark tiles in air units attack range as RED
+        if (isAirUnit) {
+            val tilesInAirAttackRange = unit.getTile().getTilesInDistance(unit.getRange())
+            for (tile in tilesInAirAttackRange) {
+                val tileToColor = tileGroups.getValue(tile)
+                tileToColor.showCircle(Color.RED, 0.3f)
+            }
         }
 
         val attackableTiles: List<AttackableTile> = if (unit.type.isCivilian()) listOf()
@@ -340,5 +356,13 @@ class WorldMapHolder(internal val worldScreen: WorldScreen, internal val tileMap
         }
 
         worldScreen.shouldUpdate=true
+    }
+
+    override fun zoom(zoomScale:Float){
+        super.zoom(zoomScale)
+        val scale = 1/scaleX  // don't use zoomScale itself, in case it was out of bounds and not applied
+        if(scale < 1 && scale > 0.5f)
+        for(tileGroup in tileGroups.values)
+            tileGroup.cityButtonLayerGroup.setScale(scale)
     }
 }

@@ -56,7 +56,8 @@ class Technology {
                 lineList += " * " + wonder.name.tr() + " (" + wonder.getShortDescription(ruleset) + ")"
         }
 
-        val revealedResource = ruleset.tileResources.values.filter { it.revealedBy == name }.map { it.name }.firstOrNull() // can only be one
+        val revealedResource = ruleset.tileResources.values.filter { it.revealedBy == name }
+                .map { it.name }.firstOrNull() // can only be one
         if (revealedResource != null) lineList += "Reveals [$revealedResource] on the map".tr()
 
         val tileImprovements = ruleset.tileImprovements.values.filter { it.techRequired == name }
@@ -74,8 +75,8 @@ class Technology {
         val replacedBuildings = enabledBuildings.mapNotNull { it.replaces }
         enabledBuildings = enabledBuildings.filter { it.name !in replacedBuildings }
 
-        if (civInfo.gameInfo.gameParameters.nuclearWeaponsEnabled)
-            enabledBuildings=enabledBuildings.filterNot { it.name=="Manhattan Project" }
+        if (!civInfo.gameInfo.gameParameters.nuclearWeaponsEnabled)
+            enabledBuildings = enabledBuildings.filterNot { it.name == "Manhattan Project" }
 
         return enabledBuildings
     }
@@ -85,7 +86,8 @@ class Technology {
             it.requiredTech == name &&
                     (it.uniqueTo == null || it.uniqueTo == civInfo.civName)
         }
-        val replacedUnits = enabledUnits.mapNotNull { it.replaces }
+        val replacedUnits = civInfo.gameInfo.ruleSet.units.values.filter { it.uniqueTo==civInfo.civName }
+                .mapNotNull { it.replaces }
         enabledUnits = enabledUnits.filter { it.name !in replacedUnits }
 
         if (!civInfo.gameInfo.gameParameters.nuclearWeaponsEnabled)

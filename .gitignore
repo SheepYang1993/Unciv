@@ -68,6 +68,7 @@ com_crashlytics_export_strings.xml
 /html/build/
 /ios/build/
 /ios-moe/build/
+/buildSrc/build
 
 /nbbuild/
 /android/nbbuild/
@@ -136,3 +137,4 @@ android/release/
 android/assets/mods/
 android/assets/SaveFiles/
 android/assets/GameSettingsOld.json
+android/assets/scenarios/

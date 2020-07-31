@@ -1,29 +1,29 @@
 package com.unciv.ui.cityscreen
 
 import com.badlogic.gdx.Input
-import com.unciv.ui.utils.AutoScrollPane as ScrollPane
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.scenes.scene2d.InputEvent
 import com.badlogic.gdx.scenes.scene2d.InputListener
 import com.badlogic.gdx.scenes.scene2d.ui.Table
-import com.badlogic.gdx.scenes.scene2d.ui.TextButton
 import com.badlogic.gdx.utils.Align
 import com.unciv.UncivGame
 import com.unciv.logic.HexMath
 import com.unciv.logic.city.CityInfo
 import com.unciv.logic.city.IConstruction
 import com.unciv.logic.map.TileInfo
-import com.unciv.models.Tutorial
-import com.unciv.models.translations.tr
 import com.unciv.ui.map.TileGroupMap
 import com.unciv.ui.tilegroups.TileSetStrings
 import com.unciv.ui.utils.*
 import java.util.*
+import com.unciv.ui.utils.AutoScrollPane as ScrollPane
 
 class CityScreen(internal val city: CityInfo): CameraStageBaseScreen() {
     var selectedTile: TileInfo? = null
     var selectedConstruction: IConstruction? = null
     var keyListener: InputListener? = null
+
+    /** Toggles or adds/removes all state changing buttons */
+    val canChangeState = UncivGame.Current.worldScreen.canChangeState
 
     /** Toggle between Constructions and cityInfo (buildings, specialists etc. */
     var showConstructionsTable = true
@@ -33,7 +33,7 @@ class CityScreen(internal val city: CityInfo): CameraStageBaseScreen() {
     /** Displays current production, production queue and available productions list - sits on LEFT */
     private var constructionsTable = ConstructionsTable(this)
 
-    /** Displays stats, buildings, specialists and stats drilldown - sits on TOP RIGHT */
+    /** Displays stats, buildings, specialists and stats drilldown - sits on TOP LEFT, can be toggled to */
     private var cityInfoTable = CityInfoTable(this)
 
     /** Displays raze city button - sits on TOP CENTER */
@@ -51,6 +51,12 @@ class CityScreen(internal val city: CityInfo): CameraStageBaseScreen() {
     /** Displays city name, allows switching between cities - sits on BOTTOM CENTER */
     private var cityPickerTable = CityScreenCityPickerTable(this)
 
+    /** Button for exiting the city - sits on BOTTOM CENTER */
+    val exitCityButton = "Exit city".toTextButton().apply {
+        labelCell.pad(10f)
+        onClick { exit() }
+    }
+
     /** Holds City tiles group*/
     private var tileGroups = ArrayList<CityTileGroup>()
 
@@ -66,6 +72,7 @@ class CityScreen(internal val city: CityInfo): CameraStageBaseScreen() {
         stage.addActor(tileTable)
         stage.addActor(selectedConstructionTable)
         stage.addActor(cityPickerTable)
+        stage.addActor(exitCityButton)
         stage.addActor(cityInfoTable)
         update()
 
@@ -90,8 +97,11 @@ class CityScreen(internal val city: CityInfo): CameraStageBaseScreen() {
         cityInfoTable.update()
         cityInfoTable.setPosition(5f, stage.height - 5f, Align.topLeft)
 
+        exitCityButton.centerX(stage)
+        exitCityButton.y = 10f
         cityPickerTable.update()
         cityPickerTable.centerX(stage)
+        cityPickerTable.setY(exitCityButton.top+10f, Align.bottom)
 
         tileTable.update(selectedTile)
         tileTable.setPosition(stage.width - 5f, 5f, Align.bottomRight)
@@ -127,12 +137,13 @@ class CityScreen(internal val city: CityInfo): CameraStageBaseScreen() {
                 city.annexCity()
                 update()
             }
+            if (!canChangeState) annexCityButton.disable()
             razeCityButtonHolder.add(annexCityButton).colspan(cityPickerTable.columns)
         } else if(!city.isBeingRazed) {
             val razeCityButton = "Raze city".toTextButton()
             razeCityButton.labelCell.pad(10f)
             razeCityButton.onClick { city.isBeingRazed=true; update() }
-            if(!UncivGame.Current.worldScreen.isPlayersTurn || city.isOriginalCapital)
+            if(!canChangeState || city.isOriginalCapital)
                 razeCityButton.disable()
 
             razeCityButtonHolder.add(razeCityButton).colspan(cityPickerTable.columns)
@@ -140,7 +151,7 @@ class CityScreen(internal val city: CityInfo): CameraStageBaseScreen() {
             val stopRazingCityButton = "Stop razing city".toTextButton()
             stopRazingCityButton.labelCell.pad(10f)
             stopRazingCityButton.onClick { city.isBeingRazed=false; update() }
-            if(!UncivGame.Current.worldScreen.isPlayersTurn) stopRazingCityButton.disable()
+            if(!canChangeState) stopRazingCityButton.disable()
             razeCityButtonHolder.add(stopRazingCityButton).colspan(cityPickerTable.columns)
         }
         razeCityButtonHolder.pack()
@@ -166,7 +177,7 @@ class CityScreen(internal val city: CityInfo): CameraStageBaseScreen() {
 
                 selectedTile = tileInfo
                 selectedConstruction = null
-                if (tileGroup.isWorkable && UncivGame.Current.worldScreen.isPlayersTurn) {
+                if (tileGroup.isWorkable && canChangeState) {
                     if (!tileInfo.isWorked() && city.population.getFreePopulation() > 0) {
                         city.workedTiles.add(tileInfo.position)
                         game.settings.addCompletedTutorialTask("Reassign worked tiles")
@@ -215,11 +226,18 @@ class CityScreen(internal val city: CityInfo): CameraStageBaseScreen() {
     }
 
     private fun getKeyboardListener(): InputListener = object : InputListener() {
-        override fun keyTyped(event: InputEvent?, character: Char): Boolean {
-            if (character != 0.toChar() || event == null) return super.keyTyped(event, character)
-            if (event.keyCode == Input.Keys.LEFT) page(-1)
-            if (event.keyCode == Input.Keys.RIGHT) page(1)
+        override fun keyDown(event: InputEvent?, keyCode: Int): Boolean {
+            if (event == null) return super.keyDown(event, keyCode)
+            when(event.keyCode) {
+                Input.Keys.LEFT -> page(-1)
+                Input.Keys.RIGHT -> page(1)
+                else -> return super.keyDown(event, keyCode)
+            }
             return true
         }
+    }
+
+    fun updateExitCityButton(){
+
     }
 }

@@ -1,6 +1,5 @@
 package com.unciv.ui.saves
 
-import com.unciv.ui.utils.AutoScrollPane as ScrollPane
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.scenes.scene2d.ui.CheckBox
@@ -14,6 +13,8 @@ import com.unciv.ui.pickerscreens.PickerScreen
 import com.unciv.ui.utils.*
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.concurrent.thread
+import com.unciv.ui.utils.AutoScrollPane as ScrollPane
 
 class LoadGameScreen(previousScreen:CameraStageBaseScreen) : PickerScreen() {
     lateinit var selectedSave:String
@@ -69,7 +70,10 @@ class LoadGameScreen(previousScreen:CameraStageBaseScreen) : PickerScreen() {
                 val loadedGame = GameSaver.gameInfoFromString(decoded)
                 UncivGame.Current.loadGame(loadedGame)
             } catch (ex: Exception) {
-                errorLabel.setText("Could not load game from clipboard!".tr())
+                var text = "Could not load game from clipboard!".tr()
+                if (ex is UncivShowableException) text += "\n"+ex.message
+                errorLabel.setText(text)
+
                 ex.printStackTrace()
             }
         }
@@ -111,7 +115,7 @@ class LoadGameScreen(previousScreen:CameraStageBaseScreen) : PickerScreen() {
     private fun updateLoadableGames(showAutosaves:Boolean) {
         saveTable.clear()
         for (save in GameSaver.getSaves().sortedByDescending { GameSaver.getSave(it).lastModified() }) {
-            if(save.startsWith("Autosave") && !showAutosaves) continue
+            if (save.startsWith("Autosave") && !showAutosaves) continue
             val textButton = TextButton(save, skin)
             textButton.onClick {
                 selectedSave = save
@@ -119,20 +123,26 @@ class LoadGameScreen(previousScreen:CameraStageBaseScreen) : PickerScreen() {
                 var textToSet = save
 
                 val savedAt = Date(GameSaver.getSave(save).lastModified())
+                descriptionLabel.setText("Loading...".tr())
                 textToSet += "\n{Saved at}: ".tr() + SimpleDateFormat("yyyy-MM-dd HH:mm").format(savedAt)
-                try {
-                    val game = GameSaver.loadGameByName(save)
-                    val playerCivNames = game.civilizations.filter { it.isPlayerCivilization() }.joinToString { it.civName.tr() }
-                    textToSet += "\n" + playerCivNames +
-                            ", " + game.difficulty.tr() + ", {Turn} ".tr() + game.turns
-                } catch (ex: Exception) {
-                    textToSet += "\n{Could not load game}!".tr()
+                thread { // Even loading the game to get its metadata can take a long time on older phones
+                    try {
+                        val game = GameSaver.loadGameByName(save)
+                        val playerCivNames = game.civilizations.filter { it.isPlayerCivilization() }.joinToString { it.civName.tr() }
+                        textToSet += "\n" + playerCivNames +
+                                ", " + game.difficulty.tr() + ", {Turn} ".tr() + game.turns
+                    } catch (ex: Exception) {
+                        textToSet += "\n{Could not load game}!".tr()
+                    }
+
+                    Gdx.app.postRunnable {
+                        descriptionLabel.setText(textToSet)
+                        rightSideButton.setText("Load [$save]".tr())
+                        rightSideButton.enable()
+                        deleteSaveButton.enable()
+                        deleteSaveButton.color = Color.RED
+                    }
                 }
-                descriptionLabel.setText(textToSet)
-                rightSideButton.setText("Load [$save]".tr())
-                rightSideButton.enable()
-                deleteSaveButton.enable()
-                deleteSaveButton.color = Color.RED
             }
             saveTable.add(textButton).pad(5f).row()
         }

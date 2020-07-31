@@ -41,6 +41,8 @@ import kotlin.concurrent.thread
 class WorldScreen(val viewingCiv:CivilizationInfo) : CameraStageBaseScreen() {
     val gameInfo = game.gameInfo
     var isPlayersTurn = viewingCiv == gameInfo.currentPlayerCiv // todo this should be updated when passing turns
+    var selectedCiv = viewingCiv // Selected civilization, used only in spectator mode
+    val canChangeState = isPlayersTurn && !viewingCiv.isSpectator()
     private var waitingForAutosave = false
 
     val mapHolder = WorldMapHolder(this, gameInfo.tileMap)
@@ -61,6 +63,7 @@ class WorldScreen(val viewingCiv:CivilizationInfo) : CameraStageBaseScreen() {
 
     private val notificationsScroll: NotificationsScroll
     var shouldUpdate = false
+
 
     private var backButtonListener : InputListener
 
@@ -121,7 +124,12 @@ class WorldScreen(val viewingCiv:CivilizationInfo) : CameraStageBaseScreen() {
                     viewingCiv.getCivUnits().any() -> viewingCiv.getCivUnits().first().getTile().position
                     else -> Vector2.Zero
                 }
-        mapHolder.setCenterPosition(tileToCenterOn,true)
+
+        // Don't select unit and change selectedCiv when centering as spectator
+        if (viewingCiv.isSpectator())
+            mapHolder.setCenterPosition(tileToCenterOn,true, false)
+        else
+            mapHolder.setCenterPosition(tileToCenterOn,true, true)
 
 
         if(gameInfo.gameParameters.isOnlineMultiplayer && !gameInfo.isUpToDate)
@@ -132,8 +140,8 @@ class WorldScreen(val viewingCiv:CivilizationInfo) : CameraStageBaseScreen() {
             stopMultiPlayerRefresher()
             // isDaemon = true, in order to not block the app closing
             multiPlayerRefresher = Timer("multiPlayerRefresh", true).apply {
-                scheduleAtFixedRate(object : TimerTask() {
-                    override fun run() { Gdx.app.postRunnable{ loadLatestMultiplayerState() } }
+                schedule(object : TimerTask() { //todo maybe not use timer for web request, from timer docs "Timer tasks should complete quickly."
+                    override fun run() { loadLatestMultiplayerState() }
                 }, 0, 10000) // 10 seconds
             }
         }
@@ -224,29 +232,38 @@ class WorldScreen(val viewingCiv:CivilizationInfo) : CameraStageBaseScreen() {
     }
 
     private fun loadLatestMultiplayerState(){
-        val loadingGamePopup = Popup(this)
-        loadingGamePopup.add("Loading latest game state...".tr())
-        loadingGamePopup.open()
-        thread(name="MultiplayerLoad") {
-            try {
-                val latestGame = OnlineMultiplayer().tryDownloadGame(gameInfo.gameId)
-                if(gameInfo.isUpToDate && gameInfo.currentPlayer==latestGame.currentPlayer) { // we were trying to download this to see when it's our turn...nothing changed
-                    loadingGamePopup.close()
-                    return@thread
-                }
-                latestGame.isUpToDate=true
-                // Since we're making a screen this needs to run from the main thread which has a GL context
-                Gdx.app.postRunnable {
-                    stopMultiPlayerRefresher()
-                    game.loadGame(latestGame)
-                }
 
-            } catch (ex: Exception) {
+        // Since we're on a background thread, all the UI calls in this func need to run from the
+        // main thread which has a GL context
+        val loadingGamePopup = Popup(this)
+        Gdx.app.postRunnable {
+            loadingGamePopup.add("Loading latest game state...".tr())
+            loadingGamePopup.open()
+        }
+
+        try {
+            val latestGame = OnlineMultiplayer().tryDownloadGame(gameInfo.gameId)
+
+            // if we find it still isn't player's turn...nothing changed
+            if(gameInfo.isUpToDate && gameInfo.currentPlayer==latestGame.currentPlayer) {
+                Gdx.app.postRunnable { loadingGamePopup.close() }
+                return
+            }
+            else{ //else we found it is the player's turn again, turn off polling and load turn
+                stopMultiPlayerRefresher()
+
+                latestGame.isUpToDate=true
+                Gdx.app.postRunnable { game.loadGame(latestGame) }
+            }
+
+        } catch (ex: Exception) {
+            val couldntDownloadLatestGame = Popup(this)
+            couldntDownloadLatestGame.addGoodSizedLabel("Couldn't download the latest game state!").row()
+            couldntDownloadLatestGame.addCloseButton()
+            couldntDownloadLatestGame.addAction(Actions.delay(5f, Actions.run { couldntDownloadLatestGame.close() }))
+
+            Gdx.app.postRunnable {
                 loadingGamePopup.close()
-                val couldntDownloadLatestGame = Popup(this)
-                couldntDownloadLatestGame.addGoodSizedLabel("Couldn't download the latest game state!").row()
-                couldntDownloadLatestGame.addCloseButton()
-                couldntDownloadLatestGame.addAction(Actions.delay(5f, Actions.run { couldntDownloadLatestGame.close() }))
                 couldntDownloadLatestGame.open()
             }
         }
@@ -264,6 +281,8 @@ class WorldScreen(val viewingCiv:CivilizationInfo) : CameraStageBaseScreen() {
         bottomTileInfoTable.x = stage.width - bottomTileInfoTable.width
         bottomTileInfoTable.y = if (game.settings.showMinimap) minimapWrapper.height else 0f
         battleTable.update()
+
+        updateSelectedCiv()
 
         tutorialTaskTable.clear()
         val tutorialTask = getCurrentTutorialTask()
@@ -288,7 +307,10 @@ class WorldScreen(val viewingCiv:CivilizationInfo) : CameraStageBaseScreen() {
         // it causes a bug when we move a unit to an unexplored tile (for instance a cavalry unit which can move far)
         mapHolder.updateTiles(viewingCiv)
 
-        topBar.update(viewingCiv)
+        if (viewingCiv.isSpectator())
+            topBar.update(selectedCiv)
+        else
+            topBar.update(viewingCiv)
 
         updateTechButton()
         techPolicyAndVictoryHolder.pack()
@@ -382,12 +404,12 @@ class WorldScreen(val viewingCiv:CivilizationInfo) : CameraStageBaseScreen() {
 
         displayTutorial(Tutorial.InjuredUnits) { gameInfo.getCurrentPlayerCivilization().getCivUnits().any { it.health < 100 } }
 
-        displayTutorial(Tutorial.Workers) { gameInfo.getCurrentPlayerCivilization().getCivUnits().any { it.name == Constants.worker } }
+        displayTutorial(Tutorial.Workers) { gameInfo.getCurrentPlayerCivilization().getCivUnits().any { it.hasUnique(Constants.workerUnique) } }
     }
 
     private fun updateDiplomacyButton(civInfo: CivilizationInfo) {
         diplomacyButtonWrapper.clear()
-        if(!civInfo.isDefeated() && civInfo.getKnownCivs()
+        if(!civInfo.isDefeated() && !civInfo.isSpectator() && civInfo.getKnownCivs()
                         .filterNot {  it==viewingCiv || it.isBarbarian() }
                         .any()) {
             displayTutorial(Tutorial.OtherCivEncountered)
@@ -430,6 +452,14 @@ class WorldScreen(val viewingCiv:CivilizationInfo) : CameraStageBaseScreen() {
         techButtonHolder.pack() //setSize(techButtonHolder.prefWidth, techButtonHolder.prefHeight)
     }
 
+    private fun updateSelectedCiv() {
+        if (bottomUnitTable.selectedUnit != null)
+            selectedCiv = bottomUnitTable.selectedUnit!!.civInfo
+        else if (bottomUnitTable.selectedCity != null)
+            selectedCiv = bottomUnitTable.selectedCity!!.civInfo
+        else viewingCiv
+    }
+
     private fun createNextTurnButton(): TextButton {
 
         val nextTurnButton = TextButton("", skin) // text is set in update()
@@ -459,17 +489,19 @@ class WorldScreen(val viewingCiv:CivilizationInfo) : CameraStageBaseScreen() {
                     try {
                         OnlineMultiplayer().tryUploadGame(gameInfoClone)
                     } catch (ex: Exception) {
-                        val cantUploadNewGamePopup = Popup(this)
-                        cantUploadNewGamePopup.addGoodSizedLabel("Could not upload game!").row()
-                        cantUploadNewGamePopup.addCloseButton()
-                        cantUploadNewGamePopup.open()
+                        Gdx.app.postRunnable { // Since we're changing the UI, that should be done on the main thread
+                            val cantUploadNewGamePopup = Popup(this)
+                            cantUploadNewGamePopup.addGoodSizedLabel("Could not upload game!").row()
+                            cantUploadNewGamePopup.addCloseButton()
+                            cantUploadNewGamePopup.open()
+                        }
                         isPlayersTurn = true // Since we couldn't push the new game clone, then it's like we never clicked the "next turn" button
                         shouldUpdate = true
                         return@thread
                     }
                 }
             } catch (ex: Exception) {
-                game.crashController.crashOccurred()
+                Gdx.app.postRunnable { game.crashController.crashOccurred() }
                 throw ex
             }
 
@@ -488,6 +520,7 @@ class WorldScreen(val viewingCiv:CivilizationInfo) : CameraStageBaseScreen() {
                     newWorldScreen.mapHolder.scaleX = mapHolder.scaleX
                     newWorldScreen.mapHolder.scaleY = mapHolder.scaleY
                     newWorldScreen.mapHolder.updateVisualScroll()
+                    newWorldScreen.selectedCiv = gameInfoClone.getCivilization(selectedCiv.civName)
                     game.worldScreen = newWorldScreen
                     game.setWorldScreen()
                 }
@@ -609,7 +642,7 @@ class WorldScreen(val viewingCiv:CivilizationInfo) : CameraStageBaseScreen() {
             viewingCiv.getKnownCivs().asSequence().filter { viewingCiv.isAtWarWith(it) }
                 .flatMap { it.cities.asSequence() }.any { viewingCiv.exploredTiles.contains(it.location) }
         }
-        displayTutorial(Tutorial.ApolloProgram) { viewingCiv.containsBuildingUnique("Enables construction of Spaceship parts") }
+        displayTutorial(Tutorial.ApolloProgram) { viewingCiv.hasUnique("Enables construction of Spaceship parts") }
         displayTutorial(Tutorial.SiegeUnits) { viewingCiv.getCivUnits().any { it.type == UnitType.Siege } }
         displayTutorial(Tutorial.Embarking) { viewingCiv.tech.getTechUniques().contains("Enables embarkation for land units") }
         displayTutorial(Tutorial.NaturalWonders) { viewingCiv.naturalWonders.size > 0 }
@@ -627,6 +660,22 @@ class WorldScreen(val viewingCiv:CivilizationInfo) : CameraStageBaseScreen() {
                 closedName.removePrefix(Constants.tutorialPopupNamePrefix)
                 tutorialController.removeTutorial(closedName)
             }
+            return
+        }
+
+        // Deselect Unit
+        if (bottomUnitTable.selectedUnit != null) {
+            bottomUnitTable.selectedUnit = null
+            bottomUnitTable.isVisible = false
+            shouldUpdate = true
+            return
+        }
+
+        // Deselect city
+        if (bottomUnitTable.selectedCity != null) {
+            bottomUnitTable.selectedCity = null
+            bottomUnitTable.isVisible = false
+            shouldUpdate = true
             return
         }
 

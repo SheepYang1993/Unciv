@@ -1,6 +1,5 @@
 package com.unciv.ui.mapeditor
 
-import com.unciv.ui.utils.AutoScrollPane as ScrollPane
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.scenes.scene2d.ui.Table
@@ -12,6 +11,7 @@ import com.unciv.models.translations.tr
 import com.unciv.ui.pickerscreens.PickerScreen
 import com.unciv.ui.saves.Gzip
 import com.unciv.ui.utils.*
+import com.unciv.ui.utils.AutoScrollPane as ScrollPane
 
 class LoadMapScreen(previousMap: TileMap?) : PickerScreen(){
     var chosenMap = ""
@@ -76,8 +76,7 @@ class LoadMapScreen(previousMap: TileMap?) : PickerScreen(){
         rightSideTable.add(deleteMapButton).row()
 
         topTable.add(rightSideTable)
-        if(previousMap==null) closeButton.isVisible=false
-        else closeButton.onClick { UncivGame.Current.setScreen(MapEditorScreen(previousMap)) }
+        if(previousMap!=null) closeButton.onClick { UncivGame.Current.setScreen(MapEditorScreen(previousMap)) }
     }
 }
 

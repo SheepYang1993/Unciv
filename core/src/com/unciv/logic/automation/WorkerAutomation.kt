@@ -11,13 +11,12 @@ import com.unciv.models.ruleset.tile.TileImprovement
 
 class WorkerAutomation(val unit: MapUnit) {
 
+
     fun automateWorkerAction() {
         val enemyUnitsInWalkingDistance = unit.movement.getDistanceToTiles().keys
-                .filter {
-                    it.militaryUnit != null && it.militaryUnit!!.civInfo.isAtWarWith(unit.civInfo)
-                }
+                .filter { UnitAutomation.containsEnemyMilitaryUnit(unit, it) }
 
-        if (enemyUnitsInWalkingDistance.isNotEmpty()) return  // Don't you dare move.
+        if (enemyUnitsInWalkingDistance.isNotEmpty()) return UnitAutomation.runAway(unit)
 
         val currentTile = unit.getTile()
         val tileToWork = findTileToWork()
@@ -33,7 +32,7 @@ class WorkerAutomation(val unit: MapUnit) {
         }
 
         if (currentTile.improvementInProgress == null && currentTile.isLand
-                && tileCanBeImproved(currentTile,unit.civInfo)) {
+                && tileCanBeImproved(currentTile, unit.civInfo)) {
             return currentTile.startWorkingOnImprovement(chooseImprovement(currentTile, unit.civInfo)!!, unit.civInfo)
         }
 
@@ -61,7 +60,6 @@ class WorkerAutomation(val unit: MapUnit) {
     }
 
 
-
     private fun tryConnectingCities(unit: MapUnit):Boolean { // returns whether we actually did anything
         //Player can choose not to auto-build roads & railroads.
         if (unit.civInfo.isPlayerCivilization() && !UncivGame.Current.settings.autoBuildingRoads)
@@ -69,40 +67,42 @@ class WorkerAutomation(val unit: MapUnit) {
 
         val targetRoad = unit.civInfo.tech.getBestRoadAvailable()
 
-        val citiesThatNeedConnecting = unit.civInfo.cities
+        val citiesThatNeedConnecting = unit.civInfo.cities.asSequence()
                 .filter { it.population.population>3 && !it.isCapital() && !it.isBeingRazed //City being razed should not be connected.
-                    && !it.cityStats.isConnectedToCapital(targetRoad) }
-        if(citiesThatNeedConnecting.isEmpty()) return false // do nothing.
+                    && !it.cityStats.isConnectedToCapital(targetRoad)
+                        // Cities that are too far away make the caReach() calculations devastatingly long
+                        && it.getCenterTile().aerialDistanceTo(unit.getTile()) < 20 }
+        if(citiesThatNeedConnecting.none()) return false // do nothing.
 
         val citiesThatNeedConnectingBfs = citiesThatNeedConnecting
+                .sortedBy { it.getCenterTile().aerialDistanceTo(unit.getTile()) }
                 .map { city -> BFS(city.getCenterTile()){it.isLand && unit.movement.canPassThrough(it)} }
-                .toMutableList()
 
         val connectedCities = unit.civInfo.cities.filter { it.isCapital() || it.cityStats.isConnectedToCapital(targetRoad) }
                 .map { it.getCenterTile() }
 
-        while(citiesThatNeedConnectingBfs.any()){
-            for(bfs in citiesThatNeedConnectingBfs.toList()){
+        // Since further away cities take longer to get to and - most importantly - the canReach() to them is very long,
+        // we order cities by their closeness to the worker first, and then check for each one whether there's a viable path
+        // it can take to an existing connected city.
+        for(bfs in citiesThatNeedConnectingBfs) {
+            while (bfs.tilesToCheck.isNotEmpty()) {
                 bfs.nextStep()
-                if(bfs.tilesToCheck.isEmpty()){ // can't get to any connected city from here
-                    citiesThatNeedConnectingBfs.remove(bfs)
-                    continue
-                }
-                for(city in connectedCities)
-                    if(bfs.tilesToCheck.contains(city)) { // we have a winner!
-                        val pathToCity = bfs.getPathTo(city)
+                for (city in connectedCities)
+                    if (bfs.tilesToCheck.contains(city)) { // we have a winner!
+                        val pathToCity = bfs.getPathTo(city).asSequence()
                         val roadableTiles = pathToCity.filter { it.roadStatus < targetRoad }
-                        val tileToConstructRoadOn :TileInfo
-                        if(unit.currentTile in roadableTiles) tileToConstructRoadOn = unit.currentTile
-                        else{
-                            val reachableTiles = roadableTiles
-                                    .filter {  unit.movement.canMoveTo(it)&& unit.movement.canReach(it)}
-                            if(reachableTiles.isEmpty()) continue
-                            tileToConstructRoadOn = reachableTiles.minBy { unit.movement.getShortestPath(it).size }!!
+                        val tileToConstructRoadOn: TileInfo
+                        if (unit.currentTile in roadableTiles) tileToConstructRoadOn = unit.currentTile
+                        else {
+                            val reachableTile = roadableTiles
+                                    .sortedBy { it.aerialDistanceTo(unit.getTile()) }
+                                    .firstOrNull { unit.movement.canMoveTo(it) && unit.movement.canReach(it) }
+                            if (reachableTile == null) continue
+                            tileToConstructRoadOn = reachableTile
                             unit.movement.headTowards(tileToConstructRoadOn)
                         }
-                        if(unit.currentMovement>0 && unit.currentTile==tileToConstructRoadOn
-                                && unit.currentTile.improvementInProgress!=targetRoad.name) {
+                        if (unit.currentMovement > 0 && unit.currentTile == tileToConstructRoadOn
+                                && unit.currentTile.improvementInProgress != targetRoad.name) {
                             val improvement = targetRoad.improvement(unit.civInfo.gameInfo.ruleSet)!!
                             tileToConstructRoadOn.startWorkingOnImprovement(improvement, unit.civInfo)
                         }
@@ -110,6 +110,7 @@ class WorkerAutomation(val unit: MapUnit) {
                     }
             }
         }
+
         return false
     }
 
@@ -141,7 +142,7 @@ class WorkerAutomation(val unit: MapUnit) {
     }
 
     private fun tileCanBeImproved(tile: TileInfo, civInfo: CivilizationInfo): Boolean {
-        if (!tile.isLand || tile.getBaseTerrain().impassable || tile.isCityCenter())
+        if (!tile.isLand || tile.isImpassible() || tile.isCityCenter())
             return false
         val city=tile.getCity()
         if (city == null || city.civInfo != civInfo)
@@ -162,15 +163,15 @@ class WorkerAutomation(val unit: MapUnit) {
 
     fun getPriority(tileInfo: TileInfo, civInfo: CivilizationInfo): Int {
         var priority = 0
-        if (tileInfo.getOwner() == civInfo){
+        if (tileInfo.getOwner() == civInfo) {
             priority += 2
             if (tileInfo.isWorked()) priority += 3
         }
         // give a minor priority to tiles that we could expand onto
-        else if (tileInfo.getOwner()==null && tileInfo.neighbors.any { it.getOwner() ==civInfo })
+        else if (tileInfo.getOwner() == null && tileInfo.neighbors.any { it.getOwner() == civInfo })
             priority += 1
 
-        if (priority!=0 && tileInfo.hasViewableResource(civInfo)) priority += 1
+        if (priority != 0 && tileInfo.hasViewableResource(civInfo)) priority += 1
         return priority
     }
 
@@ -201,12 +202,12 @@ class WorkerAutomation(val unit: MapUnit) {
 
             tile.terrainFeature == "Fallout" -> "Remove Fallout"
             tile.terrainFeature == Constants.marsh -> "Remove Marsh"
-            tile.terrainFeature == Constants.jungle -> "Trading post"
+            tile.terrainFeature == Constants.jungle -> Constants.tradingPost
             tile.terrainFeature == "Oasis" -> null
             tile.terrainFeature == Constants.forest -> "Lumber mill"
             tile.baseTerrain == Constants.hill -> "Mine"
             tile.baseTerrain in listOf(Constants.grassland,Constants.desert,Constants.plains) -> "Farm"
-            tile.baseTerrain == Constants.tundra -> "Trading post"
+            tile.baseTerrain == Constants.tundra -> Constants.tradingPost
             else -> null
         }
         if (improvementString == null) return null

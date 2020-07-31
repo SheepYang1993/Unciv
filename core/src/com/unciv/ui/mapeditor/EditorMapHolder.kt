@@ -1,15 +1,16 @@
 package com.unciv.ui.mapeditor
 
 import com.badlogic.gdx.math.Vector2
-import com.unciv.logic.map.TileMap
-import com.unciv.logic.map.TileInfo
-import com.unciv.ui.tilegroups.TileGroup
-import com.unciv.ui.tilegroups.TileSetStrings
-import com.unciv.ui.utils.onClick
-import com.unciv.ui.map.TileGroupMap
-import com.unciv.ui.utils.*
 import com.unciv.logic.HexMath
 import com.unciv.logic.civilization.CivilizationInfo
+import com.unciv.logic.map.TileInfo
+import com.unciv.logic.map.TileMap
+import com.unciv.ui.map.TileGroupMap
+import com.unciv.ui.tilegroups.TileGroup
+import com.unciv.ui.tilegroups.TileSetStrings
+import com.unciv.ui.utils.ZoomableScrollPane
+import com.unciv.ui.utils.center
+import com.unciv.ui.utils.onClick
 
 class EditorMapHolder(internal val mapEditorScreen: MapEditorScreen, internal val tileMap: TileMap): ZoomableScrollPane() {
     val tileGroups = HashMap<TileInfo, TileGroup>()
@@ -18,8 +19,8 @@ class EditorMapHolder(internal val mapEditorScreen: MapEditorScreen, internal va
     internal fun addTiles(padding:Float) {
 
         val tileSetStrings = TileSetStrings()
-        for (tileGroup in tileMap.values.map { TileGroup(it, tileSetStrings) })
-            tileGroups[tileGroup.tileInfo] = tileGroup
+        for (tileInfo in tileMap.values)
+            tileGroups[tileInfo] = TileGroup(tileInfo, tileSetStrings)
 
         tileGroupMap = TileGroupMap(tileGroups.values, padding)
         actor = tileGroupMap
@@ -74,7 +75,7 @@ class EditorMapHolder(internal val mapEditorScreen: MapEditorScreen, internal va
         val rounded = HexMath.roundHexCoords(hexPosition)
 
         if (tileMap.contains(rounded))
-            return tileMap.get(rounded)
+            return tileMap[rounded]
         else
             return null
     }

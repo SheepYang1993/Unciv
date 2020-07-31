@@ -1,6 +1,5 @@
 package com.unciv.ui.cityscreen
 
-import com.unciv.ui.utils.AutoScrollPane as ScrollPane
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.scenes.scene2d.Touchable
 import com.badlogic.gdx.scenes.scene2d.ui.Table
@@ -15,6 +14,7 @@ import com.unciv.models.stats.Stat
 import com.unciv.models.translations.tr
 import com.unciv.ui.cityscreen.ConstructionInfoTable.Companion.turnOrTurns
 import com.unciv.ui.utils.*
+import com.unciv.ui.utils.AutoScrollPane as ScrollPane
 
 class ConstructionsTable(val cityScreen: CityScreen) : Table(CameraStageBaseScreen.skin) {
     /* -1 = Nothing, >= 0 queue entry (0 = current construction) */
@@ -47,7 +47,7 @@ class ConstructionsTable(val cityScreen: CityScreen) : Table(CameraStageBaseScre
 
         add(showCityInfoTableButton).left().padLeft(pad).padBottom(pad).row()
         add(constructionsQueueScrollPane).left().padBottom(pad).row()
-        add(buttons).center().bottom().padBottom(pad).row()
+        add(buttons).left().bottom().padBottom(pad).row()
         add(availableConstructionsScrollPane).left().bottom().row()
     }
 
@@ -97,6 +97,7 @@ class ConstructionsTable(val cityScreen: CityScreen) : Table(CameraStageBaseScre
 
         constructionsQueueTable.defaults().pad(0f)
         constructionsQueueTable.add(getHeader("Current construction".tr())).fillX()
+
         constructionsQueueTable.addSeparator()
 
         if (currentConstruction != "")
@@ -107,7 +108,6 @@ class ConstructionsTable(val cityScreen: CityScreen) : Table(CameraStageBaseScre
 
         constructionsQueueTable.addSeparator()
         constructionsQueueTable.add(getHeader("Construction queue".tr())).fillX()
-        constructionsQueueTable.addSeparator()
 
         if (queue.isNotEmpty()) {
             queue.forEachIndexed { i, constructionName ->
@@ -165,11 +165,11 @@ class ConstructionsTable(val cityScreen: CityScreen) : Table(CameraStageBaseScre
                             + specialConstruction.getProductionTooltip(city))
         }
 
-        availableConstructionsTable.addCategory("Units", units)
-        availableConstructionsTable.addCategory("Wonders", buildableWonders)
-        availableConstructionsTable.addCategory("National Wonders", buildableNationalWonders)
-        availableConstructionsTable.addCategory("Buildings", buildableBuildings)
-        availableConstructionsTable.addCategory("Other", specialConstructions)
+        availableConstructionsTable.addCategory("Units", units, constructionsQueueTable.width)
+        availableConstructionsTable.addCategory("Wonders", buildableWonders, constructionsQueueTable.width)
+        availableConstructionsTable.addCategory("National Wonders", buildableNationalWonders, constructionsQueueTable.width)
+        availableConstructionsTable.addCategory("Buildings", buildableBuildings, constructionsQueueTable.width)
+        availableConstructionsTable.addCategory("Other", specialConstructions, constructionsQueueTable.width)
     }
 
     private fun getQueueEntry(constructionQueueIndex: Int, name: String): Table {
@@ -205,6 +205,8 @@ class ConstructionsTable(val cityScreen: CityScreen) : Table(CameraStageBaseScre
         if (constructionQueueIndex != cityConstructions.constructionQueue.lastIndex)
             table.add(getLowerPriorityButton(constructionQueueIndex, name, city)).right()
         else table.add().right()
+
+        table.add(getRemoveFromQueueButton(constructionQueueIndex, city)).right()
 
         table.touchable = Touchable.enabled
         table.onClick {
@@ -268,7 +270,8 @@ class ConstructionsTable(val cityScreen: CityScreen) : Table(CameraStageBaseScre
 
         if (isSelectedQueueEntry()) {
             button = "Remove from queue".toTextButton()
-            if (!UncivGame.Current.worldScreen.isPlayersTurn || city.isPuppet) button.disable()
+            if (!cityScreen.canChangeState || city.isPuppet)
+                button.disable()
             else {
                 button.onClick {
                     cityConstructions.removeFromQueue(selectedQueueEntry,false)
@@ -282,7 +285,7 @@ class ConstructionsTable(val cityScreen: CityScreen) : Table(CameraStageBaseScre
             if (construction == null
                     || cityConstructions.isQueueFull()
                     || !cityConstructions.getConstruction(construction.name).isBuildable(cityConstructions)
-                    || !UncivGame.Current.worldScreen.isPlayersTurn
+                    || !cityScreen.canChangeState
                     || construction is PerpetualConstruction && cityConstructions.isBeingConstructedOrEnqueued(construction.name)
                     || city.isPuppet) {
                 button.disable()
@@ -345,7 +348,7 @@ class ConstructionsTable(val cityScreen: CityScreen) : Table(CameraStageBaseScre
             }
 
             if ( !construction.isBuildable(cityConstructions)
-                    || !UncivGame.Current.worldScreen.isPlayersTurn
+                    || !cityScreen.canChangeState
                     || city.isPuppet || city.isInResistance()
                     || !city.canPurchase(construction)
                     || constructionGoldCost > city.civInfo.gold )
@@ -360,7 +363,7 @@ class ConstructionsTable(val cityScreen: CityScreen) : Table(CameraStageBaseScre
     private fun getRaisePriorityButton(constructionQueueIndex: Int, name: String, city: CityInfo): Table {
         val tab = Table()
         tab.add(ImageGetter.getImage("OtherIcons/Up").surroundWithCircle(40f))
-        if (UncivGame.Current.worldScreen.isPlayersTurn && !city.isPuppet) {
+        if (cityScreen.canChangeState && !city.isPuppet) {
             tab.touchable = Touchable.enabled
             tab.onClick {
                 tab.touchable = Touchable.disabled
@@ -377,7 +380,7 @@ class ConstructionsTable(val cityScreen: CityScreen) : Table(CameraStageBaseScre
     private fun getLowerPriorityButton(constructionQueueIndex: Int, name: String, city: CityInfo): Table {
         val tab = Table()
         tab.add(ImageGetter.getImage("OtherIcons/Down").surroundWithCircle(40f))
-        if (UncivGame.Current.worldScreen.isPlayersTurn && !city.isPuppet) {
+        if (cityScreen.canChangeState && !city.isPuppet) {
             tab.touchable = Touchable.enabled
             tab.onClick {
                 tab.touchable = Touchable.disabled
@@ -391,18 +394,33 @@ class ConstructionsTable(val cityScreen: CityScreen) : Table(CameraStageBaseScre
         return tab
     }
 
-    private fun getHeader(title: String): Table {
-        val headerTable = Table()
-        headerTable.background = ImageGetter.getBackground(ImageGetter.getBlue())
-        headerTable.add(title.toLabel(fontSize = 24)).fillX()
-        return headerTable
+    private fun getRemoveFromQueueButton(constructionQueueIndex: Int, city: CityInfo): Table {
+        val tab = Table()
+        tab.add(ImageGetter.getImage("OtherIcons/Stop").surroundWithCircle(40f))
+        if (cityScreen.canChangeState && !city.isPuppet) {
+            tab.touchable = Touchable.enabled
+            tab.onClick {
+                tab.touchable = Touchable.disabled
+                city.cityConstructions.removeFromQueue(constructionQueueIndex,false)
+                cityScreen.selectedConstruction = null
+                cityScreen.update()
+            }
+        }
+        return tab
     }
 
-    private fun Table.addCategory(title: String, list: ArrayList<Table>) {
+    private fun getHeader(title: String): Table {
+        return Table()
+                .background(ImageGetter.getBackground(ImageGetter.getBlue()))
+                .addCell(title.toLabel(fontSize = 24))
+                .pad(4f)
+    }
+
+    private fun Table.addCategory(title: String, list: ArrayList<Table>, prefWidth: Float) {
         if (list.isEmpty()) return
 
         addSeparator()
-        add(getHeader(title)).fill().row()
+        add(getHeader(title)).prefWidth(prefWidth).fill().row()
         addSeparator()
 
         for (table in list) {

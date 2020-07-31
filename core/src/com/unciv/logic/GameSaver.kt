@@ -3,6 +3,7 @@ package com.unciv.logic
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.files.FileHandle
 import com.badlogic.gdx.utils.Json
+import com.unciv.UncivGame
 import com.unciv.logic.civilization.CivilizationInfo
 import com.unciv.models.metadata.GameSettings
 import com.unciv.ui.utils.ImageGetter
@@ -14,19 +15,26 @@ object GameSaver {
     private const val multiplayerFilesFolder = "MultiplayerGames"
     private const val settingsFileName = "GameSettings.json"
 
+    /** When set, we know we're on Android and can save to the app's personal external file directory
+     * See https://developer.android.com/training/data-storage/app-specific#external-access-files */
+    var externalFilesDirForAndroid = ""
+
     fun json() = Json().apply { setIgnoreDeprecated(true); ignoreUnknownFields = true } // Json() is NOT THREAD SAFE so we need to create a new one for each function
 
+    fun getSubfolder(multiplayer: Boolean=false) = if(multiplayer) multiplayerFilesFolder else saveFilesFolder
 
     fun getSave(GameName: String, multiplayer: Boolean = false): FileHandle {
-        if (multiplayer)
-            return Gdx.files.local("$multiplayerFilesFolder/$GameName")
-        return Gdx.files.local("$saveFilesFolder/$GameName")
+        val localfile = Gdx.files.local("${getSubfolder(multiplayer)}/$GameName")
+        if (externalFilesDirForAndroid == "" || !Gdx.files.isExternalStorageAvailable) return localfile
+        val externalFile = Gdx.files.absolute(externalFilesDirForAndroid + "/${getSubfolder(multiplayer)}/$GameName")
+        if (localfile.exists() && !externalFile.exists()) return localfile
+        return externalFile
     }
 
-    fun getSaves(multiplayer: Boolean = false): List<String> {
-        if (multiplayer)
-            return Gdx.files.local(multiplayerFilesFolder).list().map { it.name() }
-        return Gdx.files.local(saveFilesFolder).list().map { it.name() }
+    fun getSaves(multiplayer: Boolean = false): Sequence<String> {
+        val localSaves = Gdx.files.local(getSubfolder(multiplayer)).list().asSequence().map { it.name() }
+        if (externalFilesDirForAndroid == "" || !Gdx.files.isExternalStorageAvailable) return localSaves
+        return localSaves + Gdx.files.absolute(externalFilesDirForAndroid + "/${getSubfolder(multiplayer)}").list().asSequence().map { it.name() }
     }
 
     fun saveGame(game: GameInfo, GameName: String, multiplayer: Boolean = false) {
@@ -50,7 +58,8 @@ object GameSaver {
     }
 
     fun getGeneralSettingsFile(): FileHandle {
-        return Gdx.files.local(settingsFileName)
+        return if (UncivGame.Current.consoleMode) FileHandle(settingsFileName)
+        else Gdx.files.local(settingsFileName)
     }
 
     fun getGeneralSettings(): GameSettings {
@@ -93,6 +102,7 @@ object GameSaver {
             }
         }
     }
+
     fun autoSaveSingleThreaded (gameInfo: GameInfo) {
         saveGame(gameInfo, "Autosave")
 
@@ -100,8 +110,8 @@ object GameSaver {
         val newAutosaveFilename = saveFilesFolder + File.separator + "Autosave-${gameInfo.currentPlayer}-${gameInfo.turns}"
         getSave("Autosave").copyTo(Gdx.files.local(newAutosaveFilename))
 
-        fun getAutosaves(): List<String> { return getSaves().filter { it.startsWith("Autosave") } }
-        while(getAutosaves().size>10){
+        fun getAutosaves(): Sequence<String> { return getSaves().filter { it.startsWith("Autosave") } }
+        while(getAutosaves().count()>10){
             val saveToDelete = getAutosaves().minBy { getSave(it).lastModified() }!!
             deleteSave(saveToDelete)
         }

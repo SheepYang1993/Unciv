@@ -7,6 +7,8 @@ import androidx.work.WorkManager
 import com.badlogic.gdx.backends.android.AndroidApplication
 import com.badlogic.gdx.backends.android.AndroidApplicationConfiguration
 import com.unciv.UncivGame
+import com.unciv.UncivGameParameters
+import com.unciv.logic.GameSaver
 import java.io.File
 
 class AndroidLauncher : AndroidApplication() {
@@ -17,14 +19,18 @@ class AndroidLauncher : AndroidApplication() {
 		// Only allow mods on KK+, to avoid READ_EXTERNAL_STORAGE permission earlier versions need
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
 			copyMods()
+            val externalfilesDir = getExternalFilesDir(null)
+            if(externalfilesDir!=null) GameSaver.externalFilesDirForAndroid = externalfilesDir.path
 		}
 
         val config = AndroidApplicationConfiguration().apply { useImmersiveMode = true }
-        val game = UncivGame (
+        val androidParameters = UncivGameParameters(
                 version = BuildConfig.VERSION_NAME,
                 crashReportSender = CrashReportSenderAndroid(this),
-                exitEvent = this::finish
-            )
+                exitEvent = this::finish,
+                fontImplementation = NativeFontAndroid(45)
+        )
+        val game = UncivGame ( androidParameters )
         initialize(game, config)
     }
 
@@ -45,8 +51,8 @@ class AndroidLauncher : AndroidApplication() {
 		if (internalModsDir.exists()) internalModsDir.deleteRecursively()
 
 		// Copy external mod directory (with data user put in it) to internal (where it can be read)
-		if (!externalModsDir.exists()) externalModsDir.mkdirs()
-		externalModsDir.copyRecursively(internalModsDir)
+		if (!externalModsDir.exists()) externalModsDir.mkdirs() // this can fail sometimes, which is why we check if it exists again in the next line
+        if (externalModsDir.exists()) externalModsDir.copyRecursively(internalModsDir)
 	}
 
     override fun onPause() {
@@ -60,11 +66,14 @@ class AndroidLauncher : AndroidApplication() {
     }
 
     override fun onResume() {
-        WorkManager.getInstance(applicationContext).cancelAllWorkByTag(MultiplayerTurnCheckWorker.WORK_TAG)
-        with(NotificationManagerCompat.from(this)) {
-            cancel(MultiplayerTurnCheckWorker.NOTIFICATION_ID_INFO)
-            cancel(MultiplayerTurnCheckWorker.NOTIFICATION_ID_SERVICE)
+        try { // Sometimes this fails for no apparent reason - the multiplayer checker failing to cancel should not be enough of a reason for the game to crash!
+            WorkManager.getInstance(applicationContext).cancelAllWorkByTag(MultiplayerTurnCheckWorker.WORK_TAG)
+            with(NotificationManagerCompat.from(this)) {
+                cancel(MultiplayerTurnCheckWorker.NOTIFICATION_ID_INFO)
+                cancel(MultiplayerTurnCheckWorker.NOTIFICATION_ID_SERVICE)
+            }
         }
+        catch (ex:Exception){}
         super.onResume()
     }
 }

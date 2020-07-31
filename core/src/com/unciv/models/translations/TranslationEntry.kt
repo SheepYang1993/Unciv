@@ -2,13 +2,14 @@ package com.unciv.models.translations
 
 import java.util.HashMap
 
+/**
+ *  One 'translatable' string
+ *
+ *  @property entry:    Original translatable string as defined in the game,
+ *                       including [placeholders] or {subsentences}
+ *  @property keys:     The languages
+ *  @property values:   The translations
+ *  @see      Translations
+ */
 class TranslationEntry(val entry: String) : HashMap<String, String>() {
-
-    /** For memory performance on .tr(), which was atrociously memory-expensive */
-    var entryWithShortenedSquareBrackets =""
-
-    init {
-        if(entry.contains('['))
-            entryWithShortenedSquareBrackets=entry.replace(squareBraceRegex,"[]")
-    }
 }

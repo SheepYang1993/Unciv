@@ -6,7 +6,9 @@ import com.badlogic.gdx.Screen
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.GL20
 import com.badlogic.gdx.graphics.g2d.Batch
+import com.badlogic.gdx.graphics.g2d.BitmapFont
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
+import com.badlogic.gdx.graphics.g2d.TextureAtlas
 import com.badlogic.gdx.scenes.scene2d.*
 import com.badlogic.gdx.scenes.scene2d.ui.*
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener
@@ -70,19 +72,21 @@ open class CameraStageBaseScreen : Screen {
     }
 
     companion object {
-        var skin = Skin(Gdx.files.internal("skin/flat-earth-ui.json"))
-
-        fun resetFonts(){
-            skin.get(TextButton.TextButtonStyle::class.java).font = Fonts.getFont(45).apply { data.setScale(20/45f) }
-            skin.get(CheckBox.CheckBoxStyle::class.java).font= Fonts.getFont(45).apply { data.setScale(20/45f) }
-            skin.get(Label.LabelStyle::class.java).apply {
-                font = Fonts.getFont(45).apply { data.setScale(18/45f) }
-                fontColor= Color.WHITE
+        val skin by lazy {
+            val skin = Skin().apply {
+                add("Nativefont", Fonts.font, BitmapFont::class.java)
+                addRegions(TextureAtlas("skin/flat-earth-ui.atlas"))
+                load(Gdx.files.internal("skin/flat-earth-ui.json"))
             }
-            skin.get(TextField.TextFieldStyle::class.java).font = Fonts.getFont(45).apply { data.setScale(18/45f) }
-            skin.get(SelectBox.SelectBoxStyle::class.java).font = Fonts.getFont(45).apply { data.setScale(20/45f) }
-            skin.get(SelectBox.SelectBoxStyle::class.java).listStyle.font = Fonts.getFont(45).apply { data.setScale(20/45f) }
+            skin.get(TextButton.TextButtonStyle::class.java).font = Fonts.font.apply { data.setScale(20/45f) }
+            skin.get(CheckBox.CheckBoxStyle::class.java).font= Fonts.font.apply { data.setScale(20/45f) }
             skin.get(CheckBox.CheckBoxStyle::class.java).fontColor= Color.WHITE
+            skin.get(Label.LabelStyle::class.java).font= Fonts.font.apply { data.setScale(18/45f) }
+            skin.get(Label.LabelStyle::class.java).fontColor= Color.WHITE
+            skin.get(TextField.TextFieldStyle::class.java).font = Fonts.font.apply { data.setScale(18/45f) }
+            skin.get(SelectBox.SelectBoxStyle::class.java).font = Fonts.font.apply { data.setScale(20/45f) }
+            skin.get(SelectBox.SelectBoxStyle::class.java).listStyle.font = Fonts.font.apply { data.setScale(20/45f) }
+            skin
         }
         internal var batch: Batch = SpriteBatch()
     }
@@ -189,6 +193,11 @@ fun Table.addSeparatorVertical(): Cell<Image> {
     return cell
 }
 
+fun <T : Actor> Table.addCell(actor: T): Table {
+    add(actor)
+    return this
+}
+
 /**
  * Solves concurrent modification problems - everyone who had a reference to the previous arrayList can keep using it because it hasn't changed
  */
@@ -230,6 +239,7 @@ fun String.toTextButton() = TextButton(this.tr(), CameraStageBaseScreen.skin)
 
 /** also translates */
 fun String.toLabel() = Label(this.tr(),CameraStageBaseScreen.skin)
+fun Int.toLabel() = this.toString().toLabel()
 
 // We don't want to use setFontSize and setFontColor because they set the font,
 //  which means we need to rebuild the font cache which means more memory allocation.
@@ -238,7 +248,7 @@ fun String.toLabel(fontColor:Color= Color.WHITE, fontSize:Int=18): Label {
     if(fontColor!= Color.WHITE || fontSize!=18) { // if we want the default we don't need to create another style
         labelStyle = Label.LabelStyle(labelStyle) // clone this to another
         labelStyle.fontColor = fontColor
-        if (fontSize != 18) labelStyle.font = Fonts.getFont(45)
+        if (fontSize != 18) labelStyle.font = Fonts.font
     }
     return Label(this.tr(),labelStyle).apply { setFontScale(fontSize/45f) }
 }
@@ -248,7 +258,7 @@ fun Label.setFontColor(color:Color): Label {style=Label.LabelStyle(style).apply 
 
 fun Label.setFontSize(size:Int): Label {
     style = Label.LabelStyle(style)
-    style.font = Fonts.getFont(45)
+    style.font = Fonts.font
     style = style // because we need it to call the SetStyle function. Yuk, I know.
     return this.apply { setFontScale(size/45f) } // for chaining
 }
