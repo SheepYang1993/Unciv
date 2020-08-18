@@ -2,11 +2,8 @@ package com.unciv.logic.civilization
 
 import com.unciv.Constants
 import com.unciv.models.ruleset.Policy
+import com.unciv.models.ruleset.UniqueMap
 import com.unciv.models.ruleset.VictoryType
-import com.unciv.models.translations.equalsPlaceholderText
-import com.unciv.models.translations.getPlaceholderParameters
-import com.unciv.models.translations.getPlaceholderText
-import com.unciv.ui.utils.withItem
 import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.roundToInt
@@ -17,7 +14,7 @@ class PolicyManager {
     @Transient lateinit var civInfo: CivilizationInfo
     // Needs to be separate from the actual adopted policies, so that
     //  in different game versions, policies can have different effects
-    @Transient internal val policyEffects = HashSet<String>()
+    @Transient internal val policyUniques = UniqueMap()
 
     var freePolicies = 0
     var storedCulture = 0
@@ -42,10 +39,14 @@ class PolicyManager {
 
     fun getPolicyByName(name:String): Policy = getAllPolicies().first { it.name==name }
             
-    fun setTransients(){
-        val effectsOfCurrentPolicies = adoptedPolicies.map { getPolicyByName(it).effect }
-        policyEffects.addAll(effectsOfCurrentPolicies)
-        adoptedPolicies.map { getPolicyByName(it).uniques }.forEach { policyEffects.addAll(it) }
+    fun setTransients() {
+        for (policyName in adoptedPolicies)
+            addPolicyToTransients(getPolicyByName(policyName))
+    }
+
+    fun addPolicyToTransients(policy: Policy){
+        for(unique in policy.uniqueObjects)
+            policyUniques.addUnique(unique)
     }
 
     private fun getAllPolicies() = civInfo.gameInfo.ruleSet.policyBranches.values.asSequence()
@@ -55,11 +56,15 @@ class PolicyManager {
         tryAddLegalismBuildings()
     }
 
-    fun endTurn(culture: Int) {
+    fun addCulture(culture: Int){
         val couldAdoptPolicyBefore = canAdoptPolicy()
         storedCulture += culture
         if (!couldAdoptPolicyBefore && canAdoptPolicy())
             shouldOpenPolicyPicker = true
+    }
+
+    fun endTurn(culture: Int) {
+        addCulture(culture)
         if (autocracyCompletedTurns > 0)
             autocracyCompletedTurns -= 1
     }
@@ -85,8 +90,6 @@ class PolicyManager {
 
     fun isAdopted(policyName: String): Boolean = adoptedPolicies.contains(policyName)
 
-    fun hasEffect(effectName:String) = policyEffects.contains(effectName)
-
     fun isAdoptable(policy: Policy): Boolean {
         if(isAdopted(policy.name)) return false
         if (policy.name.endsWith("Complete")) return false
@@ -106,7 +109,7 @@ class PolicyManager {
 
     fun adopt(policy: Policy, branchCompletion: Boolean = false) {
 
-        if (!branchCompletion) {
+        if (!branchCompletion && !civInfo.gameInfo.gameParameters.godMode) {
             if (freePolicies > 0) freePolicies--
             else {
                 val cultureNeededForNextPolicy = getCultureNeededForNextPolicy()
@@ -118,8 +121,7 @@ class PolicyManager {
         }
 
         adoptedPolicies.add(policy.name)
-        policyEffects.add(policy.effect)
-        policyEffects.addAll(policy.uniques)
+        addPolicyToTransients(policy)
 
         if (!branchCompletion) {
             val branch = policy.branch
@@ -130,14 +132,14 @@ class PolicyManager {
 
         val hasCapital = civInfo.cities.any { it.isCapital() }
 
-        for(effect in policy.uniques.withItem(policy.effect))
-            when (effect.getPlaceholderText()) {
+        for (unique in policy.uniqueObjects)
+            when (unique.placeholderText) {
                 "Free [] appears" -> {
-                    val unitName = effect.getPlaceholderParameters()[0]
+                    val unitName = unique.params[0]
                     if (hasCapital && (unitName != Constants.settler || !civInfo.isOneCityChallenger()))
-                        civInfo.placeUnitNearTile(civInfo.getCapital().location, unitName)
+                        civInfo.addUnit(unitName, civInfo.getCapital())
                 }
-                "Gain a free policy" -> freePolicies++
+                "Free Social Policy" -> freePolicies++
                 "Empire enters golden age" ->
                     civInfo.goldenAges.enterGoldenAge()
                 "Free Great Person" -> {
@@ -147,10 +149,10 @@ class PolicyManager {
                         val greatPerson = when (preferredVictoryType) {
                             VictoryType.Cultural -> "Great Artist"
                             VictoryType.Scientific -> "Great Scientist"
-                            VictoryType.Domination, VictoryType.Neutral ->
+                            else ->
                                 civInfo.gameInfo.ruleSet.units.keys.filter { it.startsWith("Great") }.random()
                         }
-                        civInfo.addGreatPerson(greatPerson)
+                        civInfo.addUnit(greatPerson)
                     }
                 }
                 "Quantity of strategic resources produced by the empire increased by 100%" -> civInfo.updateDetailedCivResources()

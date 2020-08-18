@@ -2,7 +2,6 @@ package com.unciv.logic.civilization.diplomacy
 
 import com.badlogic.gdx.graphics.Color
 import com.unciv.Constants
-import com.unciv.UniqueAbility
 import com.unciv.logic.civilization.*
 import com.unciv.logic.trade.Trade
 import com.unciv.logic.trade.TradeOffer
@@ -167,17 +166,20 @@ class DiplomacyManager() {
             return otherCivDiplomacy().getTurnsToRelationshipChange()
 
         if (civInfo.isCityState() && !otherCiv().isCityState()) {
-            val hasCityStateInfluenceBonus = otherCiv().nation.unique == UniqueAbility.HELLENIC_LEAGUE
-            val dropPerTurn = if(hasCityStateInfluenceBonus) .5f else 1f
-
-            if (relationshipLevel() >= RelationshipLevel.Ally)
-                return ceil((influence - 60f) / dropPerTurn).toInt() + 1
-            else if (relationshipLevel() >= RelationshipLevel.Friend)
-                return ceil((influence - 30f) / dropPerTurn).toInt() + 1
-            else
-                return 0
+            val dropPerTurn = getCityStateInfluenceDegradeRate()
+            when {
+                relationshipLevel() >= RelationshipLevel.Ally -> return ceil((influence - 60f) / dropPerTurn).toInt() + 1
+                relationshipLevel() >= RelationshipLevel.Friend -> return ceil((influence - 30f) / dropPerTurn).toInt() + 1
+                else -> return 0
+            }
         }
         return 0
+    }
+
+    fun getCityStateInfluenceDegradeRate(): Float {
+        if(otherCiv().hasUnique("City-State Influence degrades at half rate"))
+            return .5f
+        else return 1f
     }
 
     fun canDeclareWar() = turnsToPeaceTreaty()==0 && diplomaticStatus != DiplomaticStatus.War
@@ -230,7 +232,7 @@ class DiplomacyManager() {
      *  This includes friendly and allied city-states and the open border treaties.
      */
     fun isConsideredFriendlyTerritory(): Boolean {
-        if(civInfo.isCityState() && relationshipLevel() >= RelationshipLevel.Friend)
+        if (civInfo.isCityState() && relationshipLevel() >= RelationshipLevel.Friend)
             return true
         return hasOpenBorders
     }
@@ -288,9 +290,8 @@ class DiplomacyManager() {
     private fun nextTurnCityStateInfluence() {
         val initialRelationshipLevel = relationshipLevel()
 
-        val hasCityStateInfluenceBonus = otherCiv().nation.unique == UniqueAbility.HELLENIC_LEAGUE
-        val increment = if (hasCityStateInfluenceBonus) 2f else 1f
-        val decrement = if (hasCityStateInfluenceBonus) .5f else 1f
+        val increment = if (otherCiv().hasUnique("City-State Influence recovers at twice the normal rate")) 2f else 1f
+        val decrement = getCityStateInfluenceDegradeRate()
 
         if (influence > restingPoint)
             influence = max(restingPoint, influence - decrement)

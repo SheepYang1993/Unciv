@@ -1,7 +1,6 @@
 package com.unciv.logic.civilization
 
 import com.badlogic.gdx.graphics.Color
-import com.unciv.UniqueAbility
 import com.unciv.logic.map.TileInfo
 import com.unciv.models.ruleset.tile.ResourceSupplyList
 
@@ -32,7 +31,7 @@ class CivInfoTransientUpdater(val civInfo: CivilizationInfo) {
         val viewedCivs = HashMap<CivilizationInfo,TileInfo>()
         for (tile in civInfo.viewableTiles) {
             val tileOwner = tile.getOwner()
-            if (tileOwner != null) viewedCivs[civInfo] = tile
+            if (tileOwner != null) viewedCivs[tileOwner] = tile
             for (unit in tile.getUnits()) viewedCivs[unit.civInfo] = tile
         }
 
@@ -95,14 +94,14 @@ class CivInfoTransientUpdater(val civInfo: CivilizationInfo) {
             civInfo.addNotification("We have discovered [" + tile.naturalWonder + "]!", tile.position, Color.GOLD)
 
             var goldGained = 0
-            val discoveredNaturalWonders = civInfo.gameInfo.civilizations.filter { it != civInfo }
+            val discoveredNaturalWonders = civInfo.gameInfo.civilizations.filter { it != civInfo && it.isMajorCiv() }
                     .flatMap { it.naturalWonders }
             if (tile.containsUnique("Grants 500 Gold to the first civilization to discover it")
                     && !discoveredNaturalWonders.contains(tile.naturalWonder!!)) {
                 goldGained += 500
             }
 
-            if (civInfo.nation.unique == UniqueAbility.SEVEN_CITIES_OF_GOLD) {
+            if (civInfo.hasUnique("100 Gold for discovering a Natural Wonder (bonus enhanced to 500 Gold if first to discover it)")) {
                 if (!discoveredNaturalWonders.contains(tile.naturalWonder!!))
                     goldGained += 500
                 else goldGained += 100

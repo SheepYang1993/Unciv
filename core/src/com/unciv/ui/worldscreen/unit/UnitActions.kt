@@ -3,7 +3,6 @@ package com.unciv.ui.worldscreen.unit
 import com.badlogic.gdx.graphics.Color
 import com.unciv.Constants
 import com.unciv.UncivGame
-import com.unciv.UniqueAbility
 import com.unciv.logic.automation.UnitAutomation
 import com.unciv.logic.automation.WorkerAutomation
 import com.unciv.logic.civilization.CivilizationInfo
@@ -62,7 +61,7 @@ object UnitActions {
         addExplorationActions(unit, actionList)
         addPromoteAction(unit, actionList)
         addUnitUpgradeAction(unit, actionList)
-        addPillageAction(unit, actionList)
+        addPillageAction(unit, actionList, worldScreen)
         addSetupAction(unit, actionList)
         addFoundCityAction(unit, actionList, tile)
         addWorkerActions(unit, actionList, tile, worldScreen, unitTable)
@@ -171,14 +170,23 @@ object UnitActions {
                 }.takeIf { unit.currentMovement > 0 && !isSetUp })
     }
 
-    private fun addPillageAction(unit: MapUnit, actionList: ArrayList<UnitAction>) {
+    private fun addPillageAction(unit: MapUnit, actionList: ArrayList<UnitAction>, worldScreen: WorldScreen) {
         val pillageAction = getPillageAction(unit)
-        if(pillageAction!=null) actionList += pillageAction
+        if (pillageAction == null) return
+        if(pillageAction.action==null)
+            actionList += UnitAction(UnitActionType.Pillage, action = null)
+        else actionList += UnitAction(type = UnitActionType.Pillage) {
+            if (!worldScreen.hasOpenPopups()) {
+                val pillageText = "Are you sure you want to pillage this [${unit.currentTile.improvement}]?"
+                YesNoPopup(pillageText, { (pillageAction.action)(); worldScreen.shouldUpdate = true }).open()
+            }
+        }
     }
 
     fun getPillageAction(unit: MapUnit): UnitAction? {
         val tile = unit.currentTile
         if (unit.type.isCivilian() || tile.improvement == null) return null
+
         return UnitAction(
                 type = UnitActionType.Pillage,
                 action = {
@@ -191,9 +199,9 @@ object UnitActions {
                     tile.improvement = null
                     if (tile.resource!=null) tile.getOwner()?.updateDetailedCivResources()    // this might take away a resource
 
-                    if (!unit.hasUnique("No movement cost to pillage") &&
-                            (!unit.type.isMelee() || unit.civInfo.nation.unique != UniqueAbility.VIKING_FURY))
-                                    unit.useMovementPoints(1f)
+                    val freePillage = unit.hasUnique("No movement cost to pillage") ||
+                            (unit.type.isMelee() && unit.civInfo.hasUnique("Melee units pay no movement cost to pillage"))
+                    if(!freePillage) unit.useMovementPoints(1f)
 
                     unit.healBy(25)
 

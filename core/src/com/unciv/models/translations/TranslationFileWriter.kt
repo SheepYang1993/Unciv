@@ -14,6 +14,7 @@ import com.unciv.models.ruleset.tile.TileImprovement
 import com.unciv.models.ruleset.tile.TileResource
 import com.unciv.models.ruleset.unit.BaseUnit
 import com.unciv.models.ruleset.unit.Promotion
+import com.unciv.models.ruleset.unit.UnitType
 import com.unciv.models.stats.Stat
 import com.unciv.models.stats.Stats
 import com.unciv.ui.worldscreen.unit.UnitActions
@@ -206,7 +207,12 @@ object TranslationFileWriter {
                             RulesetCache.getBaseRuleset().terrains.containsKey(parameter) -> "terrain"
                             RulesetCache.getBaseRuleset().units.containsKey(parameter) -> "unit"
                             RulesetCache.getBaseRuleset().tileImprovements.containsKey(parameter) -> "tileImprovement"
-                            RulesetCache.getBaseRuleset().buildings.containsKey(parameter) -> "building"
+                            RulesetCache.getBaseRuleset().tileResources.containsKey(parameter) -> "resource"
+                            RulesetCache.getBaseRuleset().technologies.containsKey(parameter) -> "tech"
+                            RulesetCache.getBaseRuleset().buildings.containsKey(parameter)
+                                    || parameter == "Wonders" -> "building"
+
+                            UnitType.values().any { it.name == parameter } -> "unitType"
                             Stats.isStats(parameter) -> "stats"
                             else -> "param"
                         }

@@ -1,7 +1,6 @@
 package com.unciv.logic.civilization
 
 import com.unciv.Constants
-import com.unciv.UniqueAbility
 import com.unciv.logic.civilization.diplomacy.RelationshipLevel
 import com.unciv.logic.map.RoadStatus
 import com.unciv.models.metadata.BASE_GAME_DURATION_TURNS
@@ -27,7 +26,7 @@ class CivInfoStats(val civInfo: CivilizationInfo){
             }
 
         var numberOfUnitsToPayFor = max(0f, unitsToPayFor.count().toFloat() - freeUnits)
-        if(civInfo.nation.unique == UniqueAbility.FUROR_TEUTONICUS){
+        if(civInfo.hasUnique("-25% land units maintenance")){
             val numberOfUnitsWithDiscount = min(numberOfUnitsToPayFor, unitsToPayFor.count { it.type.isLandUnit() }.toFloat())
             numberOfUnitsToPayFor -= 0.25f * numberOfUnitsWithDiscount
         }
@@ -38,18 +37,19 @@ class CivInfoStats(val civInfo: CivilizationInfo){
         cost = cost.pow(1+gameProgress/3) // Why 3? To spread 1 to 1.33
         if(!civInfo.isPlayerCivilization())
             cost *= civInfo.gameInfo.getDifficulty().aiUnitMaintenanceModifier
-        if(civInfo.policies.hasEffect("-33% unit upkeep costs")) cost *= 0.66f
+        if(civInfo.hasUnique("-33% unit upkeep costs")) cost *= 0.66f
         return cost.toInt()
     }
 
     private fun getTransportationUpkeep(): Int {
         var transportationUpkeep = 0
-        var hillsUpkeep = 0
         // we no longer use .flatMap, because there are a lot of tiles and keeping them all in a list
         // just to go over them once is a waste of memory - there are low-end phones who don't have much ram
+        val ignoreHillTiles = civInfo.hasUnique("No Maintenance costs for improvements in Hills")
         for (city  in civInfo.cities) {
             for (tile in city.getTiles()) {
                 if (tile.isCityCenter()) continue
+                if(ignoreHillTiles && tile.baseTerrain==Constants.hill) continue
                 val tileUpkeep =
                     when (tile.roadStatus) {
                         RoadStatus.Road -> 1
@@ -57,13 +57,12 @@ class CivInfoStats(val civInfo: CivilizationInfo){
                         RoadStatus.None -> 0
                     }
                 transportationUpkeep += tileUpkeep
-                if (tile.baseTerrain == Constants.hill) hillsUpkeep += tileUpkeep
             }
         }
         // Inca unique according to https://civilization.fandom.com/wiki/Incan_%28Civ5%29
-        if (civInfo.nation.greatAndeanRoad)
-            transportationUpkeep = (transportationUpkeep - hillsUpkeep) / 2
-        if (civInfo.policies.hasEffect("Maintenance on roads & railroads reduced by 33%, +2 gold from all trade routes"))
+        if (civInfo.hasUnique("50% Maintenance costs reduction"))
+            transportationUpkeep /= 2
+        if (civInfo.hasUnique("Maintenance on roads & railroads reduced by 33%, +2 gold from all trade routes"))
             transportationUpkeep = (transportationUpkeep * 2 / 3f).toInt()
         return transportationUpkeep
     }
@@ -80,11 +79,11 @@ class CivInfoStats(val civInfo: CivilizationInfo){
             if (otherCiv.isCityState() && otherCiv.getCityStateType() == CityStateType.Cultured
                     && otherCiv.getDiplomacyManager(civInfo.civName).relationshipLevel() >= RelationshipLevel.Friend) {
                 val cultureBonus = Stats()
-                var culture = 3f * (civInfo.getEraNumber()+1)
-                if(civInfo.nation.unique == UniqueAbility.FATHER_GOVERNS_CHILDREN)
-                    culture*=1.5f
+                var culture = 3f * (civInfo.getEraNumber() + 1)
+                if (civInfo.hasUnique("Food and Culture from Friendly City-States are increased by 50%"))
+                    culture *= 1.5f
                 cultureBonus.add(Stat.Culture, culture)
-                statMap.add("City-States",cultureBonus)
+                statMap.add("City-States", cultureBonus)
             }
         }
 
@@ -138,7 +137,7 @@ class CivInfoStats(val civInfo: CivilizationInfo){
         }
 
         var happinessPerNaturalWonder = 1f
-        if (civInfo.nation.unique == UniqueAbility.SEVEN_CITIES_OF_GOLD)
+        if (civInfo.hasUnique("Double Happiness from Natural Wonders"))
             happinessPerNaturalWonder *= 2
 
         statMap["Natural Wonders"] = happinessPerNaturalWonder * civInfo.naturalWonders.size

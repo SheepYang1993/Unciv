@@ -1,3 +1,98 @@
+## 3.10.0
+
+Can now create Scenarios and release them with mods!
+
+Comes with Scenario Editor mode in the main game screen
+
+AI chooses to fortify in non-bombardable tiles if possible
+
+Resolved #2985 - fixed Embark/Disembark costs
+
+Resolved #2986 - Knight now obsoletes properly
+
+Map editor UI improvements
+
+Spectator and City-State civs are no logner considered as having 'discovered' a natural wonder
+
+Translation updates
+
+## 3.9.20
+
+Scenario changes:
+- Can now play an entire scenario with no improvements or techs defined
+- Added Scenario victory condition
+- Scenario now no longer spawns starting units
+
+Denounce now has a confirmation popup
+
+Ancient Ruins can now provide Culture
+
+Resolved #2951 - only ancient ruins improvements are removed around players' starting locations, and not other improvements
+
+AI now has 5 favored policy trees for each preferred victory type, making them more likely to win culturally
+
+AI no longer uses all its aluminum on units and leaves some for spaceship construction
+
+Translation updates
+
+
+## 3.9.19
+
+Resolved #2818 - Can no longer build improvements outside your borders
+
+Resolved #2944 - Air units intercept range fixed
+
+All nations converted to uniques!
+
+Solved unit purchase discount being 100x what it was supposed to be
+
+Translation updates
+
+## 3.9.18
+
+Resolved #2872 - Diplomacy screen now scrollable when there's too much text
+
+Performance improvements
+
+Fixed civ name translation in the top bar and great person point percentage bonuses
+
+Resolved #2929 - Can no longer destroy original capitals by nuke
+
+Resolved #2928 - contact with other civs is now also when encountering their cities
+
+Changed how great unit recognition works
+
+Resolved #2914 - Can no longer exploit button to 'skip' promotions
+
+Resolved #2893 - all maps are shown when searching - By vainiovano
+
+Top bar selected civ refactor, increase performance for updates - By alkorolyov
+
+Translation updates
+
+## 3.9.17
+
+All policies converted!
+
+Map editor should no longer crash in scenarios
+
+Scouts ignore river movement penalties
+
+Pillage action now has a confirmation popup
+
+Spaceship parts not shown to user until Apollo Program is built
+
+Units can pass through cities of other friendly civs
+
+Resolved #2907 - University unique registers properly
+
+Added civ-wide per-building stat bonus
+
+New Diplomacy Overview UI - By lishaoxia1985
+
+Fog of war implementation - By alkorolyov
+
+
 ## 3.9.16
 
 Resolved #3901 - nuclear weapon setting remains between games

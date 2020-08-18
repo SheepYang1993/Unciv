@@ -1,7 +1,6 @@
 package com.unciv.logic.city
 
 import com.badlogic.gdx.graphics.Color
-import com.unciv.UniqueAbility
 import com.unciv.logic.automation.Automation
 import com.unciv.logic.map.TileInfo
 import com.unciv.ui.utils.withItem
@@ -46,7 +45,8 @@ class CityExpansionManager {
         val goldCost = getGoldCostOfTile(tileInfo)
 
         class NotEnoughGoldToBuyTileException : Exception()
-        if (cityInfo.civInfo.gold < goldCost) throw NotEnoughGoldToBuyTileException()
+        if (cityInfo.civInfo.gold < goldCost && !cityInfo.civInfo.gameInfo.gameParameters.godMode)
+            throw NotEnoughGoldToBuyTileException()
         cityInfo.civInfo.gold -= goldCost
         takeOwnership(tileInfo)
     }
@@ -61,7 +61,7 @@ class CityExpansionManager {
         if (cityInfo.containsBuildingUnique("Culture and Gold costs of acquiring new tiles reduced by 25% in this city"))
             cost *= 0.75 // Specialty of Krepost
 
-        if (cityInfo.civInfo.nation.unique == UniqueAbility.MANIFEST_DESTINY)
+        if (cityInfo.civInfo.hasUnique("-50% cost when purchasing tiles"))
             cost /= 2
         return cost.toInt()
     }

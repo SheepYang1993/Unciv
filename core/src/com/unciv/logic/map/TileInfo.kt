@@ -3,15 +3,12 @@
 import com.badlogic.gdx.math.Vector2
 import com.unciv.Constants
 import com.unciv.UncivGame
-import com.unciv.UniqueAbility
 import com.unciv.logic.HexMath
 import com.unciv.logic.city.CityInfo
 import com.unciv.logic.civilization.CivilizationInfo
 import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.tile.*
 import com.unciv.models.stats.Stats
-import com.unciv.models.translations.equalsPlaceholderText
-import com.unciv.models.translations.getPlaceholderParameters
 import com.unciv.models.translations.tr
 import kotlin.math.abs
 
@@ -172,7 +169,6 @@ open class TileInfo {
     fun getTileStats(city: CityInfo?, observingCiv: CivilizationInfo): Stats {
         var stats = getBaseTerrain().clone()
 
-
         if (terrainFeature != null) {
             val terrainFeatureBase = getTerrainFeature()
             if (terrainFeatureBase!!.overrideStats)
@@ -181,13 +177,20 @@ open class TileInfo {
                 stats.add(terrainFeatureBase)
         }
 
-        if(city!=null) for(unique in city.getBuildingUniques()) {
-            if (unique.equalsPlaceholderText("[] from [] tiles")) {
-                val placeholderParams = unique.getPlaceholderParameters()
-                val tileType = placeholderParams[1]
-                if (baseTerrain == tileType || terrainFeature == tileType || resource == tileType || improvement == tileType)
-                    stats.add(Stats.parse(placeholderParams[0]))
-            }
+        // City-specific bonuses
+        if(city!=null) for(unique in city.cityConstructions.builtBuildingUniqueMap.getUniques("[] from [] tiles in this city")) {
+            val tileType = unique.params[1]
+            if (baseTerrain == tileType || terrainFeature == tileType
+                    || resource == tileType || improvement == tileType)
+                stats.add(Stats.parse(unique.params[0]))
+        }
+
+        // Civ-wide bonuses
+        if(city!=null) for(unique in city.civInfo.getMatchingUniques("[] from every []")) {
+            val tileType = unique.params[1]
+            if (baseTerrain == tileType || terrainFeature == tileType
+                    || (tileType == "Strategic resource" && hasViewableResource(observingCiv) && getTileResource().resourceType == ResourceType.Strategic))
+                stats.add(Stats.parse(unique.params[0]))
         }
 
         if (naturalWonder != null) {
@@ -195,7 +198,7 @@ open class TileInfo {
             stats.add(wonder)
 
             // Spain doubles tile yield
-            if (city != null && city.civInfo.nation.unique == UniqueAbility.SEVEN_CITIES_OF_GOLD) {
+            if (city != null && city.civInfo.hasUnique("Tile yields from Natural Wonders doubled")) {
                 stats.add(wonder)
             }
         }
@@ -207,17 +210,12 @@ open class TileInfo {
                 val resourceBuilding = tileMap.gameInfo.ruleSet.buildings[resource.building!!]!!
                 stats.add(resourceBuilding.resourceBonusStats!!) // resource-specific building (eg forge, stable) bonus
             }
-            if (resource.resourceType == ResourceType.Strategic
-                    && observingCiv.nation.unique == UniqueAbility.SIBERIAN_RICHES)
-                stats.production += 1
-            if (city != null) {
-                if (isWater) {
-                    if (city.containsBuildingUnique("+1 production from all sea resources worked by the city"))
-                        stats.production += 1
-                    if (city.containsBuildingUnique("+1 production and gold from all sea resources worked by the city")) {
-                        stats.production += 1
-                        stats.gold += 1
-                    }
+            if (city != null && isWater) {
+                if (city.containsBuildingUnique("+1 production from all sea resources worked by the city"))
+                    stats.production += 1
+                if (city.containsBuildingUnique("+1 production and gold from all sea resources worked by the city")) {
+                    stats.production += 1
+                    stats.gold += 1
                 }
             }
         }
@@ -254,23 +252,21 @@ open class TileInfo {
 
         if(city!=null)
             for(unique in city.civInfo.getMatchingUniques("[] from every []")) {
-                val placeholderParams = unique.getPlaceholderParameters()
-                if (unique == placeholderParams[1])
-                    stats.add(Stats.parse(placeholderParams[0]))
+                if (improvement.name == unique.params[1] || (unique.params[1]=="Great Improvement" && improvement.isGreatImprovement()))
+                    stats.add(Stats.parse(unique.params[0]))
             }
 
-
-            stats.science += 1f
         if (containsGreatImprovement()
-                && observingCiv.policies.hasEffect("Tile yield from great improvement +100%, golden ages increase by 50%"))
+                && observingCiv.hasUnique("Tile yield from Great Improvements +100%"))
             stats.add(improvement) // again, for the double effect
-        if (containsGreatImprovement() && city != null && city.civInfo.nation.unique == UniqueAbility.SCHOLARS_OF_THE_JADE_HALL)
-            stats.science += 2
 
-        if (improvement.uniques.contains("+1 additional Culture for each adjacent Moai"))
-            stats.culture += neighbors.count { it.improvement == "Moai" }
-        if (improvement.uniques.contains("+1 food for each adjacent Mountain"))
-            stats.food += neighbors.count { it.baseTerrain == Constants.mountain }
+        for(unique in improvement.uniqueObjects)
+            if (unique.placeholderText == "[] for each adjacent []") {
+                val adjacent = unique.params[1]
+                val numberOfBonuses = neighbors.count { it.improvement == adjacent
+                        || it.baseTerrain==adjacent || it.terrainFeature==adjacent }
+                stats.add(Stats.parse(unique.params[0]).times(numberOfBonuses.toFloat()))
+            }
 
         return stats
     }
@@ -285,6 +281,9 @@ open class TileInfo {
             improvement.techRequired?.let { civInfo.tech.isResearched(it) } == false -> false
             "Cannot be built on bonus resource" in improvement.uniques && resource != null
                     && getTileResource().resourceType == ResourceType.Bonus -> false
+            !improvement.hasUnique("Can be built outside your borders")
+                    && getOwner() != civInfo -> false
+
             improvement.terrainsCanBeBuiltOn.contains(topTerrain.name) -> true
             improvement.name == "Road" && roadStatus == RoadStatus.None -> true
             improvement.name == "Railroad" && this.roadStatus != RoadStatus.Railroad -> true
@@ -321,6 +320,12 @@ open class TileInfo {
     fun getDefensiveBonus(): Float {
         var bonus = getBaseTerrain().defenceBonus
         if (terrainFeature != null) bonus += getTerrainFeature()!!.defenceBonus
+        val tileImprovement = getTileImprovement()
+        if (tileImprovement != null) {
+            for (unique in tileImprovement.uniqueObjects)
+                if (unique.placeholderText == "Gives a defensive bonus of []%")
+                    bonus += unique.params[0].toFloat() / 100
+        }
         return bonus
     }
 
@@ -374,7 +379,7 @@ open class TileInfo {
         if (roadStatus !== RoadStatus.None && !isCityCenter()) lineList += roadStatus.toString().tr()
         if (improvement != null) lineList += improvement!!.tr()
         if (improvementInProgress != null && isViewableToPlayer)
-            lineList += "{$improvementInProgress}\r\n{in} $turnsToImprovement {turns}".tr() // todo change to [] translation notation
+            lineList += "{$improvementInProgress}\r\n  $turnsToImprovement {turns}".tr() // todo change to [] translation notation
         if (civilianUnit != null && isViewableToPlayer)
             lineList += civilianUnit!!.name.tr() + " - " + civilianUnit!!.civInfo.civName.tr()
         if (militaryUnit != null && isViewableToPlayer) {
@@ -384,14 +389,6 @@ open class TileInfo {
             lineList += milUnitString
         }
         var defenceBonus = getDefensiveBonus()
-        val tileImprovement = getTileImprovement()
-        if (tileImprovement != null) {
-            defenceBonus += when {
-                tileImprovement.hasUnique("Gives a defensive bonus of 50%") -> 0.5f
-                tileImprovement.hasUnique("Gives a defensive bonus of 100%") -> 1.0f
-                else -> 0.0f
-            }
-        }
         if (defenceBonus != 0.0f) {
             var defencePercentString = (defenceBonus * 100).toInt().toString() + "%"
             if (!defencePercentString.startsWith("-")) defencePercentString = "+$defencePercentString"

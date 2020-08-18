@@ -4,7 +4,6 @@ import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.math.Vector2
 import com.unciv.Constants
 import com.unciv.UncivGame
-import com.unciv.UniqueAbility
 import com.unciv.logic.battle.Battle
 import com.unciv.logic.civilization.CivilizationInfo
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
@@ -16,16 +15,22 @@ import com.unciv.logic.map.TileMap
 import com.unciv.logic.trade.TradeLogic
 import com.unciv.logic.trade.TradeOffer
 import com.unciv.logic.trade.TradeType
+import com.unciv.models.ruleset.Building
 import com.unciv.models.ruleset.tile.ResourceSupplyList
 import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.models.ruleset.unit.BaseUnit
+import com.unciv.models.stats.Stat
 import com.unciv.models.stats.Stats
+import com.unciv.models.translations.equalsPlaceholderText
 import com.unciv.models.translations.getPlaceholderParameters
 import com.unciv.ui.utils.withoutItem
 import java.util.*
 import kotlin.collections.HashMap
 import kotlin.collections.HashSet
-import kotlin.math.*
+import kotlin.math.ceil
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.roundToInt
 
 class CityInfo {
     @Transient lateinit var civInfo: CivilizationInfo
@@ -89,7 +94,7 @@ class CityInfo {
         civInfo.addNotification("[$name] has been founded!", cityLocation, Color.PURPLE)
 
         if (civInfo.cities.size == 1) {
-            cityConstructions.addBuilding("Palace")
+            cityConstructions.addBuilding(capitalCityIndicator())
         }
 
         civInfo.policies.tryAddLegalismBuildings()
@@ -140,7 +145,9 @@ class CityInfo {
     fun getTiles(): Sequence<TileInfo> = tiles.asSequence().map { tileMap[it] }
     fun getWorkableTiles() = tilesInRange.asSequence().filter { it.getOwner() == civInfo }
 
-    fun isCapital() = cityConstructions.isBuilt("Palace")
+    fun isCapital(): Boolean = cityConstructions.builtBuildings.contains(capitalCityIndicator())
+    fun capitalCityIndicator(): String = getRuleset().buildings.values.first { it.uniques.contains("Indicates the capital city") }.name
+
     fun isConnectedToCapital(connectionTypePredicate: (Set<String>) -> Boolean = {true}): Boolean {
         val mediumTypes = civInfo.citiesConnectedToCapitalToMediums[this] ?: return false
         return connectionTypePredicate(mediumTypes)
@@ -193,20 +200,19 @@ class CityInfo {
 
         if (resource.improvement == tileInfo.improvement || tileInfo.isCityCenter()
                 // Per https://gaming.stackexchange.com/questions/53155/do-manufactories-and-customs-houses-sacrifice-the-strategic-or-luxury-resources
-                || (resource.resourceType==ResourceType.Strategic && tileInfo.containsGreatImprovement())){
+                || (resource.resourceType==ResourceType.Strategic && tileInfo.containsGreatImprovement())) {
             var amountToAdd = 1
-            if(resource.resourceType == ResourceType.Strategic) {
+            if (resource.resourceType == ResourceType.Strategic) {
                 amountToAdd = 2
-                if (civInfo.policies.hasEffect("Quantity of strategic resources produced by the empire increased by 100%"))
-                    amountToAdd *= 2
-                if (civInfo.nation.unique == UniqueAbility.SIBERIAN_RICHES && resource.name in listOf("Horses", "Iron", "Uranium"))
-                    amountToAdd *= 2
-                if (resource.name == "Oil" && civInfo.nation.unique == UniqueAbility.TRADE_CARAVANS)
+                if (civInfo.hasUnique("Quantity of strategic resources produced by the empire increased by 100%"))
                     amountToAdd *= 2
             }
-            if(resource.resourceType == ResourceType.Luxury
+            for (unique in civInfo.getMatchingUniques("Double quantity of [] produced"))
+                if (unique.params[0] == resource.name)
+                    amountToAdd *= 2
+            if (resource.resourceType == ResourceType.Luxury
                     && containsBuildingUnique("Provides 1 extra copy of each improved luxury resource near this City"))
-                amountToAdd*=2
+                amountToAdd *= 2
 
             return amountToAdd
         }
@@ -243,7 +249,6 @@ class CityInfo {
         return null
     }
 
-    fun getBuildingUniques(): Sequence<String> = cityConstructions.getBuiltBuildings().flatMap { it.uniques.asSequence() }
     fun containsBuildingUnique(unique:String) = cityConstructions.getBuiltBuildings().any { it.uniques.contains(unique) }
 
     fun getGreatPersonMap():HashMap<String,Stats> {
@@ -259,21 +264,27 @@ class CityInfo {
             stats["Buildings"] = buildingStats
 
         for (entry in stats) {
-            if (civInfo.nation.unique == UniqueAbility.INGENUITY)
-                entry.value.science *= 1.5f
-            if (civInfo.hasUnique("Great Merchants are earned 25% faster"))
-                entry.value.gold *= 1.25f
+            for (unique in civInfo.getMatchingUniques("[] is earned []% faster")) {
+                val unit = civInfo.gameInfo.ruleSet.units[unique.params[0]]
+                if (unit == null) continue
+                val greatUnitUnique = unit.uniques.firstOrNull { it.equalsPlaceholderText("Great Person - []") }
+                if (greatUnitUnique == null) continue
+                val statName = greatUnitUnique.getPlaceholderParameters()[0]
+                val stat = Stat.values().firstOrNull { it.name == statName }
+                // this is not very efficient, and if it causes problems we can try and think of a way of improving it
+                if (stat != null) entry.value.add(stat, entry.value.get(stat) * unique.params[1].toFloat()/100)
+            }
 
             for (unique in civInfo.getMatchingUniques("+[]% great person generation in all cities"))
-                stats[entry.key] = stats[entry.key]!!.times(1 + (unique.getPlaceholderParameters()[0].toFloat() / 100))
+                stats[entry.key] = stats[entry.key]!!.times(1 + (unique.params[0].toFloat() / 100))
         }
 
         return stats
     }
 
     fun getGreatPersonPoints(): Stats {
-        val stats=Stats()
-        for(entry in getGreatPersonMap().values)
+        val stats = Stats()
+        for (entry in getGreatPersonMap().values)
             stats.add(entry)
         return stats
     }
@@ -349,11 +360,11 @@ class CityInfo {
     }
 
     fun destroyCity() {
-        for(airUnit in getCenterTile().airUnits.toList()) airUnit.destroy() //Destroy planes stationed in city
+        for (airUnit in getCenterTile().airUnits.toList()) airUnit.destroy() //Destroy planes stationed in city
 
         // Edge case! What if a water unit is in a city, and you raze the city?
         // Well, the water unit has to return to the water!
-        for(unit in getCenterTile().getUnits()) {
+        for (unit in getCenterTile().getUnits()) {
             if (!unit.movement.canPassThrough(getCenterTile()))
                 unit.movement.teleportToClosestMoveableTile()
         }
@@ -362,10 +373,12 @@ class CityInfo {
         // because it updates the city stats which assumes there is a capital, so if you remove the capital it crashes
         getTiles().forEach { expansion.relinquishOwnership(it) }
         civInfo.cities = civInfo.cities.toMutableList().apply { remove(this@CityInfo) }
-        getCenterTile().improvement="City ruins"
+        getCenterTile().improvement = "City ruins"
 
-        if (isCapital() && civInfo.cities.isNotEmpty()) // Move the capital if destroyed (by a nuke or by razing)
-            civInfo.cities.first().cityConstructions.addBuilding("Palace")
+        if (isCapital() && civInfo.cities.isNotEmpty()) { // Move the capital if destroyed (by a nuke or by razing)
+            val capitalCityBuilding = getRuleset().buildings.values.first { it.uniques.contains("Indicates the capital city") }
+            civInfo.cities.first().cityConstructions.addBuilding(capitalCityBuilding.name)
+        }
     }
 
     fun annexCity() {
@@ -452,7 +465,7 @@ class CityInfo {
         health = getMaxHealth() / 2 // I think that cities recover to half health when conquered?
         reassignPopulation()
 
-        if (foundingCiv.cities.size == 1) cityConstructions.addBuilding("Palace") // Resurrection!
+        if (foundingCiv.cities.size == 1) cityConstructions.addBuilding(capitalCityIndicator()) // Resurrection!
         isPuppet = false
         cityStats.update()
 
@@ -513,16 +526,17 @@ class CityInfo {
             cityConstructions.removeBuilding(building.name)
 
         // Remove/relocate palace for old Civ
-        if(cityConstructions.isBuilt("Palace")){
-            cityConstructions.removeBuilding("Palace")
+        val capitalCityIndicator = capitalCityIndicator()
+        if(cityConstructions.isBuilt(capitalCityIndicator)){
+            cityConstructions.removeBuilding(capitalCityIndicator)
             if(oldCiv.cities.isNotEmpty()){
-                oldCiv.cities.first().cityConstructions.addBuilding("Palace") // relocate palace
+                oldCiv.cities.first().cityConstructions.addBuilding(capitalCityIndicator) // relocate palace
             }
         }
 
         // Locate palace for newCiv if this is the only city they have
         if (newCivInfo.cities.count() == 1) {
-            cityConstructions.addBuilding("Palace")
+            cityConstructions.addBuilding(capitalCityIndicator)
         }
 
         isBeingRazed=false
@@ -569,7 +583,7 @@ class CityInfo {
         val baseGold = 20 + 10 * population.population + Random().nextInt(40)
         val turnModifier = max(0, min(50, civInfo.gameInfo.turns - turnAcquired)) / 50f
         val cityModifier = if (containsBuildingUnique("Doubles Gold given to enemy if city is captured")) 2f else 1f
-        val conqueringCivModifier = if (conqueringCiv.nation.unique == UniqueAbility.RIVER_WARLORD) 3f else 1f
+        val conqueringCivModifier = if (conqueringCiv.hasUnique("Receive triple Gold from Barbarian encampments and pillaging Cities")) 3f else 1f
 
         val goldPlundered = baseGold * turnModifier * cityModifier * conqueringCivModifier
         return goldPlundered.toInt()

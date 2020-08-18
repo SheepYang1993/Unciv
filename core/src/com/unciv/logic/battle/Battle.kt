@@ -3,7 +3,6 @@ package com.unciv.logic.battle
 import com.badlogic.gdx.graphics.Color
 import com.unciv.Constants
 import com.unciv.UncivGame
-import com.unciv.UniqueAbility
 import com.unciv.logic.city.CityInfo
 import com.unciv.logic.civilization.AlertType
 import com.unciv.logic.civilization.CivilizationInfo
@@ -162,7 +161,7 @@ object Battle {
         // German unique - needs to be checked before we try to move to the enemy tile, since the encampment disappears after we move in
         if (defender.isDefeated() && defender.getCivInfo().isBarbarian()
                 && attackedTile.improvement == Constants.barbarianEncampment
-                && attacker.getCivInfo().nation.unique == UniqueAbility.FUROR_TEUTONICUS
+                && attacker.getCivInfo().hasUnique("67% chance to earn 25 Gold and recruit a Barbarian unit from a conquered encampment")
                 && Random().nextDouble() > 0.67) {
             attacker.getCivInfo().placeUnitNearTile(attackedTile.position, defender.getName())
             attacker.getCivInfo().gold += 25
@@ -171,7 +170,7 @@ object Battle {
 
         // Similarly, Ottoman unique
         if (defender.isDefeated() && defender.getUnitType().isWaterUnit() && attacker.isMelee() && attacker.getUnitType().isWaterUnit()
-                && attacker.getCivInfo().nation.unique == UniqueAbility.BARBARY_CORSAIRS
+                && attacker.getCivInfo().hasUnique("Melee naval units have a 1/3 chance to capture defeated naval units")
                 && Random().nextDouble() > 0.33) {
             attacker.getCivInfo().placeUnitNearTile(attackedTile.position, defender.getName())
         }
@@ -225,8 +224,8 @@ object Battle {
         if(barbarianUnit.isDefeated() && barbarianUnit is MapUnitCombatant
                 && barbarianUnit.getCivInfo().isBarbarian()
                 && civUnit.getCivInfo().hasUnique("Gain Culture when you kill a barbarian unit"))
-            civUnit.getCivInfo().policies.storedCulture +=
-                    max(barbarianUnit.unit.baseUnit.strength,barbarianUnit.unit.baseUnit.rangedStrength)
+            civUnit.getCivInfo().policies.addCulture(
+                    max(barbarianUnit.unit.baseUnit.strength, barbarianUnit.unit.baseUnit.rangedStrength))
     }
 
     // XP!
@@ -245,7 +244,8 @@ object Battle {
 
         if(thisCombatant.getCivInfo().isMajorCiv()) {
             var greatGeneralPointsModifier = 1f
-            if (thisCombatant.getCivInfo().nation.unique == UniqueAbility.ART_OF_WAR)
+            // Yeah sue me I didn't parse these params
+            if (thisCombatant.getCivInfo().hasUnique("[Great General] is earned [50]% faster"))
                 greatGeneralPointsModifier += 0.5f
             if (thisCombatant.unit.hasUnique("Combat very likely to create Great Generals"))
                 greatGeneralPointsModifier += 1f
@@ -317,7 +317,7 @@ object Battle {
             capturedUnit.assignOwner(attacker.getCivInfo())
         }
 
-        destroyIfDefeated(defenderCiv,attacker.getCivInfo())
+        destroyIfDefeated(defenderCiv, attacker.getCivInfo())
         capturedUnit.updateVisibleTiles()
     }
 
@@ -336,10 +336,10 @@ object Battle {
             val city = tile.getCity()
             if (city != null && city.location == tile.position) {
                 city.health = 1
-                if (city.population.population <= 5) {
+                if (city.population.population <= 5 && !city.isOriginalCapital) {
                     city.destroyCity()
                 } else {
-                    city.population.population -= 5
+                    city.population.population = max(city.population.population-5, 1)
                     city.population.unassignExtraPopulation()
                     continue
                 }

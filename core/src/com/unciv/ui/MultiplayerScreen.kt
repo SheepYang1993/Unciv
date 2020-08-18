@@ -2,6 +2,7 @@ package com.unciv.ui
 
 import com.unciv.ui.utils.AutoScrollPane as ScrollPane
 import com.badlogic.gdx.Gdx
+import com.badlogic.gdx.files.FileHandle
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.scenes.scene2d.ui.*
 import com.unciv.logic.GameInfo
@@ -18,7 +19,7 @@ class MultiplayerScreen(previousScreen: CameraStageBaseScreen) : PickerScreen() 
 
     private lateinit var selectedGame: GameInfo
     private lateinit var selectedGameName: String
-    private var multiplayerGameList = mutableMapOf<String, String>()
+    private var multiplayerGameList = mutableMapOf<String, FileHandle>()
     private val rightSideTable = Table()
     private val leftSideTable = Table()
 
@@ -186,7 +187,7 @@ class MultiplayerScreen(previousScreen: CameraStageBaseScreen) : PickerScreen() 
     fun reloadGameListUI() {
         val leftSubTable = Table()
         val gameSaver = GameSaver
-        val savedGames: Sequence<String>
+        val savedGames: Sequence<FileHandle>
 
         try {
             savedGames = gameSaver.getSaves(true)
@@ -199,14 +200,14 @@ class MultiplayerScreen(previousScreen: CameraStageBaseScreen) : PickerScreen() 
             return
         }
 
-        for (gameSaveName in savedGames) {
+        for (gameSaveFile in savedGames) {
             try {
                 val gameTable = Table()
-                val game = gameSaver.loadGameByName(gameSaveName, true)
+                val game = gameSaver.loadGameFromFile(gameSaveFile)
 
                 //Add games to list so saves don't have to be loaded as Files so often
                 if (!gameIsAlreadySavedAsMultiplayer(game.gameId))
-                    multiplayerGameList[game.gameId] = gameSaveName
+                    multiplayerGameList[game.gameId] = gameSaveFile
 
                 if (isUsersTurn(game)) {
                     gameTable.add(ImageGetter.getNationIndicator(game.currentPlayerCiv.nation, 45f))
@@ -214,11 +215,11 @@ class MultiplayerScreen(previousScreen: CameraStageBaseScreen) : PickerScreen() 
                     gameTable.add()
                 }
 
-                val lastModifiedMillis = gameSaver.getSave(gameSaveName, true).lastModified()
-                val gameButton = TextButton(gameSaveName, skin)
+                val lastModifiedMillis = gameSaveFile.lastModified()
+                val gameButton = gameSaveFile.name().toTextButton()
                 gameButton.onClick {
                     selectedGame = game
-                    selectedGameName = gameSaveName
+                    selectedGameName = gameSaveFile.name()
                     copyGameIdButton.enable()
                     editButton.enable()
                     rightSideButton.enable()
@@ -254,7 +255,7 @@ class MultiplayerScreen(previousScreen: CameraStageBaseScreen) : PickerScreen() 
             for (gameId in multiplayerGameList.keys) {
                 try {
                     val game = OnlineMultiplayer().tryDownloadGame(gameId)
-                    GameSaver.saveGame(game, multiplayerGameList.getValue(gameId), true)
+                    GameSaver.saveGame(game, multiplayerGameList.getValue(gameId).name(), true)
                 } catch (ex: Exception) {
                     //skipping one is not fatal
                     //Trying to use as many prev. used strings as possible
@@ -326,7 +327,7 @@ class EditMultiplayerGameInfoScreen(game: GameInfo, gameName: String, backScreen
     init {
         val textField = TextField(gameName, skin)
 
-        topTable.add(Label("Rename".tr(), skin)).row()
+        topTable.add("Rename".toLabel()).row()
         topTable.add(textField).pad(10f).padBottom(30f).width(stage.width/2).row()
 
         //TODO Change delete to "give up"
@@ -392,13 +393,13 @@ class AddMultiplayerGameScreen(backScreen: MultiplayerScreen) : PickerScreen(){
             gameIDTextField.text = Gdx.app.clipboard.contents
         }
 
-        topTable.add(Label("GameID".tr(), skin)).row()
+        topTable.add("GameID".toLabel()).row()
         val gameIDTable = Table()
         gameIDTable.add(gameIDTextField).pad(10f).width(2*stage.width/3 - pasteGameIDButton.width)
         gameIDTable.add(pasteGameIDButton)
         topTable.add(gameIDTable).padBottom(30f).row()
 
-        topTable.add(Label("Game name".tr(), skin)).row()
+        topTable.add("Game name".toLabel()).row()
         topTable.add(gameNameTextField).pad(10f).padBottom(30f).width(stage.width/2).row()
 
         //CloseButton Setup

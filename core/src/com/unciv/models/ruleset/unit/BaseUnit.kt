@@ -9,7 +9,7 @@ import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.translations.Translations
 import com.unciv.models.translations.tr
 import com.unciv.models.stats.INamed
-import com.unciv.models.translations.getPlaceholderParameters
+import kotlin.math.pow
 
 // This is BaseUnit because Unit is already a base Kotlin class and to avoid mixing the two up
 
@@ -99,13 +99,13 @@ class BaseUnit : INamed, IConstruction {
         return productionCost.toInt()
     }
 
-    fun getBaseGoldCost() = Math.pow((30 * cost).toDouble(), 0.75) * (1 + hurryCostModifier / 100)
+    fun getBaseGoldCost() = (30.0 * cost).pow(0.75) * (1 + hurryCostModifier / 100)
 
     override fun getGoldCost(civInfo: CivilizationInfo): Int {
         var cost = getBaseGoldCost()
-        if (civInfo.policies.adoptedPolicies.contains("Militarism")) cost *= 0.66f
-        for(unique in civInfo.getMatchingUniques("Cost of purchasing items in cities reduced by []%"))
-            cost *= 1-(unique.getPlaceholderParameters()[0].toFloat())
+        if (civInfo.hasUnique("Gold cost of purchasing units -33%")) cost *= 0.66f
+        for (unique in civInfo.getMatchingUniques("Cost of purchasing items in cities reduced by []%"))
+            cost *= 1 - (unique.params[0].toFloat() / 100)
         return (cost / 10).toInt() * 10 // rounded down o nearest ten
     }
 
@@ -149,17 +149,19 @@ class BaseUnit : INamed, IConstruction {
     }
 
     override fun postBuildEvent(construction: CityConstructions, wasBought: Boolean): Boolean {
-        val unit = construction.cityInfo.civInfo.placeUnitNearTile(construction.cityInfo.location, name)
+        val civInfo = construction.cityInfo.civInfo
+        val unit = civInfo.placeUnitNearTile(construction.cityInfo.location, name)
         if (unit == null) return false // couldn't place the unit, so there's actually no unit =(
 
         //movement penalty
-        if (wasBought && !unit.hasUnique("Can move directly once bought"))
+        if (wasBought && !unit.hasUnique("Can move directly once bought") && !civInfo.gameInfo.gameParameters.godMode)
             unit.currentMovement = 0f
 
         if (this.unitType.isCivilian()) return true // tiny optimization makes save files a few bytes smaller
 
         var XP = construction.getBuiltBuildings().sumBy { it.xpForNewUnits }
-        if (construction.cityInfo.civInfo.policies.isAdopted("Total War")) XP += 15
+        for (unique in civInfo.getMatchingUniques("New military units start with [] Experience"))
+            XP += unique.params[0].toInt()
         unit.promotions.XP = XP
 
         if (unit.type in listOf(UnitType.Melee,UnitType.Mounted,UnitType.Armor)

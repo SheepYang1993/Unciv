@@ -37,6 +37,12 @@ object ImageGetter {
         setTextureRegionDrawables()
     }
 
+    fun setNewRuleset(ruleset: Ruleset) {
+        if (this.ruleset == ruleset) return
+        this.ruleset = ruleset
+        setTextureRegionDrawables()
+    }
+
 
     fun setTextureRegionDrawables(){
         textureRegionDrawables.clear()
@@ -134,7 +140,9 @@ object ImageGetter {
 
         val iconGroup = getImage("ImprovementIcons/$improvementName").surroundWithCircle(size)
 
-        val improvement = ruleset.tileImprovements[improvementName]!!
+        val improvement = ruleset.tileImprovements[improvementName]
+        if(improvement==null)
+            throw Exception("No improvement $improvementName found in ruleset!")
         when {
             improvement.food>0 -> iconGroup.circle.color= foodCircleColor
             improvement.production>0 -> iconGroup.circle.color= productionCircleColor
@@ -197,11 +205,12 @@ object ImageGetter {
 
     fun getResourceImage(resourceName: String, size:Float): Actor {
         val iconGroup = getImage("ResourceIcons/$resourceName").surroundWithCircle(size)
-        val resource = ruleset.tileResources[resourceName]!!
+        val resource = ruleset.tileResources[resourceName]
+        if(resource==null) throw Exception("No resource $resourceName found in ruleset!")
         when {
-            resource.food>0 -> iconGroup.circle.color= foodCircleColor
-            resource.production>0 -> iconGroup.circle.color= productionCircleColor
-            resource.gold>0 -> iconGroup.circle.color= goldCircleColor
+            resource.food > 0 -> iconGroup.circle.color = foodCircleColor
+            resource.production > 0 -> iconGroup.circle.color = productionCircleColor
+            resource.gold > 0 -> iconGroup.circle.color = goldCircleColor
         }
 
         if(resource.resourceType==ResourceType.Luxury){

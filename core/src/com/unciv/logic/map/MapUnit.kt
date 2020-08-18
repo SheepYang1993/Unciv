@@ -4,7 +4,6 @@ import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.math.Vector2
 import com.unciv.Constants
 import com.unciv.UncivGame
-import com.unciv.UniqueAbility
 import com.unciv.logic.automation.UnitAutomation
 import com.unciv.logic.automation.WorkerAutomation
 import com.unciv.logic.civilization.CivilizationInfo
@@ -106,15 +105,15 @@ class MapUnit {
                 && civInfo.hasUnique("All military naval units receive +1 movement and +1 sight"))
             movement += 1
 
-        if (type.isWaterUnit() && civInfo.nation.unique == UniqueAbility.SUN_NEVER_SETS)
+        if (type.isWaterUnit() && civInfo.hasUnique("+2 movement for all naval units"))
             movement += 2
 
-        if (type == UnitType.Mounted &&
-                civInfo.nation.unique == UniqueAbility.MONGOL_TERROR)
-            movement += 1
+        for (unique in civInfo.getMatchingUniques("+[] Movement for all [] units"))
+            if (unique.params[1] == type.name)
+                movement += unique.params[0].toInt()
 
         if (civInfo.goldenAges.isGoldenAge() &&
-                civInfo.nation.unique == UniqueAbility.ACHAEMENID_LEGACY)
+                civInfo.hasUnique("+1 Movement for all units during Golden Age"))
             movement += 1
 
         return movement
@@ -160,12 +159,12 @@ class MapUnit {
             visibilityRange += getUniques().count { it == "+1 Visibility Range" }
             if (hasUnique("+2 Visibility Range")) visibilityRange += 2 // This shouldn't be stackable
             if (hasUnique("Limited Visibility")) visibilityRange -= 1
-            if (civInfo.nation.unique == UniqueAbility.MANIFEST_DESTINY)
+            if (civInfo.hasUnique("+1 Sight for all land military units"))
                 visibilityRange += 1
             if (type.isWaterUnit() && !type.isCivilian()
                     && civInfo.hasUnique("All military naval units receive +1 movement and +1 sight"))
                 visibilityRange += 1
-            if (isEmbarked() && civInfo.nation.unique == UniqueAbility.WAYFINDING)
+            if (isEmbarked() && civInfo.hasUnique("+1 Sight when embarked"))
                 visibilityRange += 1
             val tile = getTile()
             if (tile.baseTerrain == Constants.hill && type.isLandUnit()) visibilityRange += 1
@@ -233,7 +232,7 @@ class MapUnit {
     fun getEmbarkedMovement(): Int {
         var movement=2
         movement += civInfo.tech.getTechUniques().count { it == "Increases embarked movement +1" }
-        if (civInfo.nation.unique == UniqueAbility.VIKING_FURY) movement +=1
+        if (civInfo.hasUnique("+1 Movement for all embarked units")) movement +=1
         return movement
     }
 
@@ -522,7 +521,7 @@ class MapUnit {
         tile.improvement = null
 
         var goldGained = civInfo.getDifficulty().clearBarbarianCampReward * civInfo.gameInfo.gameParameters.gameSpeed.modifier
-        if (civInfo.nation.unique == UniqueAbility.RIVER_WARLORD)
+        if (civInfo.hasUnique("Receive triple Gold from Barbarian encampments and pillaging Cities"))
             goldGained *= 3f
 
         civInfo.gold += goldGained.toInt()
@@ -594,6 +593,11 @@ class MapUnit {
             val amount = listOf(25,60,100).random(tileBasedRandom)
             civInfo.gold+=amount
             civInfo.addNotification("We have found a stash of [$amount] gold in the ruins!",tile.position, Color.GOLD)
+        }
+
+        actions.add {
+            civInfo.policies.addCulture(20)
+            civInfo.addNotification("We have discovered cultural artifacts in the ruins! (+20 Culture)",tile.position, Color.GOLD)
         }
 
         // Map of the surrounding area
