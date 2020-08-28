@@ -4,6 +4,7 @@ import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.scenes.scene2d.ui.Image
+import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.unciv.Constants
 import com.unciv.UncivGame
 import com.unciv.logic.civilization.CivilizationInfo
@@ -13,6 +14,7 @@ import com.unciv.models.ruleset.tech.Technology
 import com.unciv.models.translations.tr
 import com.unciv.ui.utils.*
 import java.util.*
+import kotlin.collections.ArrayList
 
 
 class TechPickerScreen(internal val civInfo: CivilizationInfo, centerOnTech: Technology? = null) : PickerScreen() {
@@ -22,19 +24,28 @@ class TechPickerScreen(internal val civInfo: CivilizationInfo, centerOnTech: Tec
     private var selectedTech: Technology? = null
     private var civTech: TechManager = civInfo.tech
     private var tempTechsToResearch: ArrayList<String>
-    private var lines=ArrayList<Image>()
+    private var lines = ArrayList<Image>()
+
+    /** We need this to be a separate table, and NOT the topTable, because *inhales*
+     * When call setConnectingLines we need to pack() the table so that the lines will align correctly, BUT
+     *  this causes the table to be SMALLER THAN THE SCREEN for small tech trees e.g. scenarios,
+     *  meaning the tech tree is in a crumpled heap at the lower-left corner of the screen
+     * Having this be a separate table allows us to leave the TopTable as is (that is: auto-width to fit the scrollPane)
+     *  leaving us the juicy small tech tree right in the center.
+     */
+    private val techTable = Table()
 
     // All these are to counter performance problems when updating buttons for all techs.
     private var researchableTechs = civInfo.gameInfo.ruleSet.technologies.keys
             .filter { civTech.canBeResearched(it) }.toHashSet()
 
-    private val currentTechColor = colorFromRGB(7,46,43)
-    private val researchedTechColor = colorFromRGB(133,112,39)
-    private val researchableTechColor = colorFromRGB(28,170,0)
-    private val queuedTechColor = colorFromRGB(39,114,154)
+    private val currentTechColor = colorFromRGB(7, 46, 43)
+    private val researchedTechColor = colorFromRGB(133, 112, 39)
+    private val researchableTechColor = colorFromRGB(28, 170, 0)
+    private val queuedTechColor = colorFromRGB(39, 114, 154)
 
 
-    private val turnsToTech = civInfo.gameInfo.ruleSet.technologies.values.associateBy ({ it.name },{civTech.turnsToTech(it.name)})
+    private val turnsToTech = civInfo.gameInfo.ruleSet.technologies.values.associateBy({ it.name }, { civTech.turnsToTech(it.name) })
 
     constructor(freeTechPick: Boolean, civInfo: CivilizationInfo) : this(civInfo) {
         isFreeTechPick = freeTechPick
@@ -44,12 +55,13 @@ class TechPickerScreen(internal val civInfo: CivilizationInfo, centerOnTech: Tec
     init {
         setDefaultCloseAction()
         onBackButtonClicked { UncivGame.Current.setWorldScreen() }
-        scrollPane.setOverscroll(false,false)
+        scrollPane.setOverscroll(false, false)
         tempTechsToResearch = ArrayList(civTech.techsToResearch)
 
         createTechTable()
-
         setButtonsInfo()
+        topTable.add(techTable)
+
         rightSideButton.setText("Pick a tech".tr())
         rightSideButton.onClick(UncivSound.Paper) {
             game.settings.addCompletedTutorialTask("Pick technology")
@@ -77,39 +89,46 @@ class TechPickerScreen(internal val civInfo: CivilizationInfo, centerOnTech: Tec
             if (firstAvailableTech != null)
                 centerOnTechnology(firstAvailableTech)
         }
-
     }
 
     private fun createTechTable() {
         val allTechs = civInfo.gameInfo.ruleSet.technologies.values
-        val columns = allTechs.map { it.column!!.columnNumber}.max()!! +1
+        val columns = allTechs.map { it.column!!.columnNumber }.max()!! + 1
         val techMatrix = Array<Array<Technology?>>(columns) { arrayOfNulls(10) } // Divided into columns, then rows
 
         for (technology in allTechs) {
             techMatrix[technology.column!!.columnNumber][technology.row - 1] = technology
         }
 
-        val erasName = allTechs.map { it.era() }.distinct()
-        for ((i,eraName) in erasName.withIndex()) {
-            val columnSpan = if (eraName != Constants.ancientEra && eraName != Constants.futureEra) 2 else 3
+        val erasNamesToColumns = LinkedHashMap<String, ArrayList<Int>>()
+        for(tech in allTechs) {
+            val era = tech.era()
+            if (!erasNamesToColumns.containsKey(era)) erasNamesToColumns[era] = ArrayList()
+            val columnNumber = tech.column!!.columnNumber
+            if (!erasNamesToColumns[era]!!.contains(columnNumber)) erasNamesToColumns[era]!!.add(columnNumber)
+        }
+        var i=0
+        for ((era, columns) in erasNamesToColumns) {
+            val columnSpan = columns.size
             val color = if (i % 2 == 0) Color.BLUE else Color.FIREBRICK
-            topTable.add(eraName.toLabel().addBorder(2f, color)).fill().colspan(columnSpan)
+            i++
+            techTable.add(era.toLabel().addBorder(2f, color)).fill().colspan(columnSpan)
         }
 
         for (i in 0..9) {
-            topTable.row().pad(5f).padRight(40f)
+            techTable.row().pad(5f).padRight(40f)
 
             for (j in techMatrix.indices) {
                 val tech = techMatrix[j][i]
                 if (tech == null)
-                    topTable.add() // empty cell
+                    techTable.add() // empty cell
 
                 else {
                     val techButton = TechButton(tech.name, civTech, false)
 
                     techNameToButton[tech.name] = techButton
                     techButton.onClick { selectTechnology(tech, false) }
-                    topTable.add(techButton)
+                    techTable.add(techButton)
                 }
             }
         }
@@ -137,34 +156,35 @@ class TechPickerScreen(internal val civInfo: CivilizationInfo, centerOnTech: Tec
                 text += " (" + tempTechsToResearch.indexOf(techName) + ")"
             }
 
-            if (!civTech.isResearched(techName) || techName== Constants.futureTech)
-                text += "\r\n" + turnsToTech[techName] + " {turns}".tr()
+            if (!civTech.isResearched(techName) || techName == Constants.futureTech)
+                text += "\r\n" + turnsToTech[techName] + " ${Fonts.turn}".tr()
 
             techButton.text.setText(text)
         }
-
 
         addConnectingLines()
     }
 
     private fun addConnectingLines() {
-        topTable.pack() // Needed for the lines to work!
+        techTable.pack() // required for the table to have the button positions set, so topTable.stageToLocalCoordinates will be correct
+        scrollPane.updateVisualScroll()
+
         for (line in lines) line.remove()
         lines.clear()
 
         for (tech in civInfo.gameInfo.ruleSet.technologies.values) {
-            if(!techNameToButton.containsKey(tech.name))
+            if (!techNameToButton.containsKey(tech.name))
                 throw Exception("tech ${tech.name} not found!")
             val techButton = techNameToButton[tech.name]!!
             for (prerequisite in tech.prerequisites) {
                 val prerequisiteButton = techNameToButton[prerequisite]!!
                 val techButtonCoords = Vector2(0f, techButton.height / 2)
                 techButton.localToStageCoordinates(techButtonCoords)
-                topTable.stageToLocalCoordinates(techButtonCoords)
+                techTable.stageToLocalCoordinates(techButtonCoords)
 
                 val prerequisiteCoords = Vector2(prerequisiteButton.width, prerequisiteButton.height / 2)
                 prerequisiteButton.localToStageCoordinates(prerequisiteCoords)
-                topTable.stageToLocalCoordinates(prerequisiteCoords)
+                techTable.stageToLocalCoordinates(prerequisiteCoords)
 
                 val line = ImageGetter.getLine(techButtonCoords.x, techButtonCoords.y,
                         prerequisiteCoords.x, prerequisiteCoords.y, 2f)
@@ -176,7 +196,7 @@ class TechPickerScreen(internal val civInfo: CivilizationInfo, centerOnTech: Tec
                 }
                 line.color = lineColor
 
-                topTable.addActor(line)
+                techTable.addActor(line)
                 lines.add(line)
             }
         }
@@ -191,13 +211,11 @@ class TechPickerScreen(internal val civInfo: CivilizationInfo, centerOnTech: Tec
         if (!switchfromWorldScreen)
             return
 
-        if(tech==null)
+        if (tech == null)
             return
 
         // center on technology
-        if (center) {
-            centerOnTechnology(tech)
-        }
+        if (center) centerOnTechnology(tech)
 
         if (isFreeTechPick) {
             selectTechnologyForFreeTech(tech)
@@ -206,7 +224,7 @@ class TechPickerScreen(internal val civInfo: CivilizationInfo, centerOnTech: Tec
         }
 
         if (civInfo.gameInfo.gameParameters.godMode && !civInfo.tech.isResearched(tech.name)
-                && selectedTech == previousSelectedTech){
+                && selectedTech == previousSelectedTech) {
             civInfo.tech.addTechnology(tech.name)
         }
 

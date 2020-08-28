@@ -133,7 +133,7 @@
 		"movement": 4,
 		"cost": 30,
 		"requiredTech": "Sailing",
-		"uniques": ["Cannot enter ocean tiles until Astronomy","May create improvements on water resources"],
+		"uniques": ["Cannot enter ocean tiles until Astronomy", "May create improvements on water resources"],
 		"hurryCostModifier": 20
 	},
 	{
@@ -175,7 +175,7 @@
 		"requiredResource": "Horses",
 		"upgradesTo": "Knight",
 		"obsoleteTech": "Chivalry",
-		"uniques": ["No defensive terrain bonus","Rough terrain penalty"],
+		"uniques": ["No defensive terrain bonus", "Rough terrain penalty"],
 		"hurryCostModifier": 20,
 		"attackSound": "arrow"
 	},
@@ -191,7 +191,7 @@
 		"requiredTech": "The Wheel",
 		"upgradesTo": "Knight",
 		"obsoleteTech": "Chivalry",
-		"uniques": ["No defensive terrain bonus","Rough terrain penalty"],
+		"uniques": ["No defensive terrain bonus", "Rough terrain penalty"],
 		"hurryCostModifier": 20,
 		"attackSound": "arrow"
 	},
@@ -496,8 +496,8 @@
 		"upgradesTo": "Musketman",
 		"obsoleteTech": "Metallurgy",
 		"requiredResource": "Iron",
-		"uniques": ["Amphibious"]
-		"promotions": ["Shock I"]
+		"uniques": ["Amphibious"],
+		"promotions": ["Shock I"],
 		"hurryCostModifier": 20,
 		"attackSound": "metalhit"
 		//Danish unique unit. Can attack from the sea without any penalty, and moves faster.
@@ -656,7 +656,7 @@
 		"requiredTech": "Astronomy",
 		"upgradesTo": "Ironclad",
 		"obsoleteTech": "Combustion",
-		"uniques": ["+1 Visibility Range","May withdraw before melee"],
+		"uniques": ["+1 Visibility Range","May withdraw before melee ([50]%)"],
 		"hurryCostModifier": 20
 	},
 	{
@@ -1071,7 +1071,7 @@
 		"interceptRange": 2,
 		"cost": 375,
 		"requiredTech": "Combustion",
-		"uniques": ["Can attack submarines", "[40]% chance to intercept air attacks", "May withdraw before melee"], // todo: add bonus vs submarines
+		"uniques": ["Can attack submarines", "[40]% chance to intercept air attacks", "May withdraw before melee ([50]%)"], // todo: add bonus vs submarines
 		"hurryCostModifier": 20
 	},
 	{

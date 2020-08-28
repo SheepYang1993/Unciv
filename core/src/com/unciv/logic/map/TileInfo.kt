@@ -10,6 +10,7 @@ import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.tile.*
 import com.unciv.models.stats.Stats
 import com.unciv.models.translations.tr
+import com.unciv.ui.utils.Fonts
 import kotlin.math.abs
 
 open class TileInfo {
@@ -177,20 +178,19 @@ open class TileInfo {
                 stats.add(terrainFeatureBase)
         }
 
-        // City-specific bonuses
-        if(city!=null) for(unique in city.cityConstructions.builtBuildingUniqueMap.getUniques("[] from [] tiles in this city")) {
-            val tileType = unique.params[1]
-            if (baseTerrain == tileType || terrainFeature == tileType
-                    || resource == tileType || improvement == tileType)
-                stats.add(Stats.parse(unique.params[0]))
-        }
-
-        // Civ-wide bonuses
-        if(city!=null) for(unique in city.civInfo.getMatchingUniques("[] from every []")) {
-            val tileType = unique.params[1]
-            if (baseTerrain == tileType || terrainFeature == tileType
-                    || (tileType == "Strategic resource" && hasViewableResource(observingCiv) && getTileResource().resourceType == ResourceType.Strategic))
-                stats.add(Stats.parse(unique.params[0]))
+        if (city != null) {
+            val cityWideUniques = city.cityConstructions.builtBuildingUniqueMap.getUniques("[] from [] tiles in this city")
+            val civWideUniques = city.civInfo.getMatchingUniques("[] from every []")
+            for (unique in cityWideUniques + civWideUniques) {
+                val tileType = unique.params[1]
+                if (baseTerrain == tileType || terrainFeature == tileType
+                        || resource == tileType
+                        || (tileType == "Water" && isWater)
+                        || (tileType == "Strategic resource" && hasViewableResource(observingCiv) && getTileResource().resourceType == ResourceType.Strategic)
+                        || (tileType == "Water resource" && isWater && hasViewableResource(observingCiv))
+                )
+                    stats.add(Stats.parse(unique.params[0]))
+            }
         }
 
         if (naturalWonder != null) {
@@ -210,22 +210,11 @@ open class TileInfo {
                 val resourceBuilding = tileMap.gameInfo.ruleSet.buildings[resource.building!!]!!
                 stats.add(resourceBuilding.resourceBonusStats!!) // resource-specific building (eg forge, stable) bonus
             }
-            if (city != null && isWater) {
-                if (city.containsBuildingUnique("+1 production from all sea resources worked by the city"))
-                    stats.production += 1
-                if (city.containsBuildingUnique("+1 production and gold from all sea resources worked by the city")) {
-                    stats.production += 1
-                    stats.gold += 1
-                }
-            }
         }
 
         val improvement = getTileImprovement()
         if (improvement != null)
             stats.add(getImprovementStats(improvement, observingCiv, city))
-
-        if (city != null && isWater && city.containsBuildingUnique("+1 gold from worked water tiles in city"))
-            stats.gold += 1
 
         if (isCityCenter()) {
             if (stats.food < 2) stats.food = 2f
@@ -250,11 +239,16 @@ open class TileInfo {
         if (improvement.improvingTech != null && observingCiv.tech.isResearched(improvement.improvingTech!!))
             stats.add(improvement.improvingTechStats!!) // eg Chemistry for mines
 
-        if(city!=null)
-            for(unique in city.civInfo.getMatchingUniques("[] from every []")) {
-                if (improvement.name == unique.params[1] || (unique.params[1]=="Great Improvement" && improvement.isGreatImprovement()))
+
+        if(city!=null) {
+            val cityWideUniques = city.cityConstructions.builtBuildingUniqueMap.getUniques("[] from [] tiles in this city")
+            val civWideUniques = city.civInfo.getMatchingUniques("[] from every []")
+            for (unique in cityWideUniques + civWideUniques) {
+                if (improvement.name == unique.params[1]
+                        || (unique.params[1] == "Great Improvement" && improvement.isGreatImprovement()))
                     stats.add(Stats.parse(unique.params[0]))
             }
+        }
 
         if (containsGreatImprovement()
                 && observingCiv.hasUnique("Tile yield from Great Improvements +100%"))
@@ -379,7 +373,7 @@ open class TileInfo {
         if (roadStatus !== RoadStatus.None && !isCityCenter()) lineList += roadStatus.toString().tr()
         if (improvement != null) lineList += improvement!!.tr()
         if (improvementInProgress != null && isViewableToPlayer)
-            lineList += "{$improvementInProgress}\r\n  $turnsToImprovement {turns}".tr() // todo change to [] translation notation
+            lineList += "{$improvementInProgress}  $turnsToImprovement ${Fonts.turn}".tr()
         if (civilianUnit != null && isViewableToPlayer)
             lineList += civilianUnit!!.name.tr() + " - " + civilianUnit!!.civInfo.civName.tr()
         if (militaryUnit != null && isViewableToPlayer) {

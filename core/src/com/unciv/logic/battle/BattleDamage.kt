@@ -4,8 +4,6 @@ import com.unciv.Constants
 import com.unciv.logic.map.MapUnit
 import com.unciv.logic.map.TileInfo
 import com.unciv.models.ruleset.unit.UnitType
-import com.unciv.models.translations.equalsPlaceholderText
-import com.unciv.models.translations.getPlaceholderParameters
 import java.util.*
 import kotlin.collections.HashMap
 import kotlin.collections.set
@@ -25,7 +23,7 @@ object BattleDamage {
         val modifiers = mutableListOf<BattleDamageModifier>()
         for (ability in unit.getUniques()) {
             // This beut allows us to have generic unit uniques: "Bonus vs City 75%", "Penatly vs Mounted 25%" etc.
-            val regexResult = Regex(BONUS_VS_UNIT_TYPE).matchEntire(ability)
+            val regexResult = Regex(BONUS_VS_UNIT_TYPE).matchEntire(ability.text)
             if (regexResult == null) continue
             val vs = regexResult.groups[2]!!.value
             val modificationAmount = regexResult.groups[3]!!.value.toFloat() / 100  // if it says 15%, that's 0.15f in modification
@@ -40,11 +38,12 @@ object BattleDamage {
 
     private fun getGeneralModifiers(combatant: ICombatant, enemy: ICombatant): HashMap<String, Float> {
         val modifiers = HashMap<String, Float>()
-        fun addToModifiers(BDM:BattleDamageModifier){
-            val text = BDM.getText()
-            if(!modifiers.containsKey(text)) modifiers[text]=0f
-            modifiers[text]=modifiers[text]!!+BDM.modificationAmount
+        fun addToModifiers(text:String, amount:Float) {
+            if (!modifiers.containsKey(text)) modifiers[text] = 0f
+            modifiers[text] = modifiers[text]!! + amount
         }
+        fun addToModifiers(BDM:BattleDamageModifier) =
+                addToModifiers(BDM.getText(), BDM.modificationAmount)
 
         val civInfo = combatant.getCivInfo()
         if (combatant is MapUnitCombatant) {
@@ -59,6 +58,11 @@ object BattleDamage {
                     addToModifiers(BDM)
                 if (BDM.vs == "air units" && enemy.getUnitType().isAirUnit())
                     addToModifiers(BDM)
+            }
+
+            for (unique in combatant.unit.getMatchingUniques("+[]% Strength vs []")) {
+                if (unique.params[1] == enemy.getName())
+                    addToModifiers("vs [${unique.params[1]}]", unique.params[0].toFloat() / 100)
             }
 
             //https://www.carlsguides.com/strategy/civilization5/war/combatbonuses.php
@@ -114,8 +118,8 @@ object BattleDamage {
             modifiers.putAll(getTileSpecificModifiers(attacker, defender.getTile()))
 
             for (ability in attacker.unit.getUniques()) {
-                if(ability.equalsPlaceholderText("Bonus as Attacker []%")) {
-                    val bonus = ability.getPlaceholderParameters()[0].toFloat() / 100
+                if(ability.placeholderText == "Bonus as Attacker []%") {
+                    val bonus = ability.params[0].toFloat() / 100
                     if (modifiers.containsKey("Attacker Bonus"))
                         modifiers["Attacker Bonus"] = modifiers["Attacker Bonus"]!! + bonus
                     else modifiers["Attacker Bonus"] = bonus
@@ -181,13 +185,18 @@ object BattleDamage {
                 modifiers["Tile"] = tileDefenceBonus
         }
 
-        if(attacker.isRanged()) {
-            val defenceVsRanged = 0.25f * defender.unit.getUniques().count { it == "+25% Defence against ranged attacks" }
+        if (attacker.isRanged()) {
+            val defenceVsRanged = 0.25f * defender.unit.getUniques().count { it.text == "+25% Defence against ranged attacks" }
             if (defenceVsRanged > 0) modifiers["defence vs ranged"] = defenceVsRanged
         }
 
-        val carrierDefenceBonus = 0.25f * defender.unit.getUniques().count { it == "+25% Combat Bonus when defending" }
+        val carrierDefenceBonus = 0.25f * defender.unit.getUniques().count { it.text == "+25% Combat Bonus when defending" }
         if (carrierDefenceBonus > 0) modifiers["Armor Plating"] = carrierDefenceBonus
+
+        for(unique in defender.unit.getMatchingUniques("+[]% defence in [] tiles")) {
+            if (tile.baseTerrain == unique.params[1] || tile.terrainFeature == unique.params[1])
+                modifiers["[${unique.params[1]}] defence"] = unique.params[0].toFloat() / 100
+        }
 
 
         if (defender.unit.isFortified())

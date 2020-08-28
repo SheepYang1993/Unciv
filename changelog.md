@@ -1,3 +1,82 @@
+## 3.10.5
+
+Added Mod Management screen!
+
+Can now download Mods directly from Github, with mod discoverability!
+
+Can now add Maps to mods, to dissimenate them through Github as well!
+
+Resolved #3035 - added nationsToRemove in modOptions
+
+Translation options
+
+## 3.10.4
+
+Resolved #2979 - Display countdown to negotiate peace in diplomacy screen
+
+Resolved #2844 - Can now immediately move units in Desktop with right-click
+
+Added unit symbols for Turn, Strength, Ranged Strength, Range and Movement as 'emojis'
+
+Resolved #2937 - can add large increments of gold in trades
+
+Keep the perpetual construciton going, if the user set it manually.
+
+Tech picker screen auto-handles eras of different lengths
+
+Can remove tile features outside your borders
+
+A mishmash of different fixes: Unit uniques and promotions, happiness calculation, etc.
+
+Added a new test that ensures no two placeholders are the same
+
+
+## 3.10.3
+
+Settler 'by name' recognition changed to 'by unique' recognition, allowing for modded settler-like units
+
+Can now disable diplomatic relationship changes in a mod
+
+MapGen doesn't place ancient ruins if they're not defined in the current ruleset
+
+Resolved #3016 - Policy branch uniques are translated properly
+
+Borders consist of both civ colors, making some borders (esp. Germany) much clearer
+
+Roads and railoads can be removed outside your borders
+
+More generifications!
+
+Merged Building and Policy unique activations
+
+Translation updates
+
+## 3.10.2
+
+Added link checks when loading mods, so you'll know if you messed something up when making them
+
+Dealt with some game assumptions about what exists, which may not be true in mods
+
+TechPickerScreen centers small tech trees nicely
+
+By HadeanLake:
+- Bugfixes
+- Fixed AI being stuck doing science or gold per turn
+
+Translation updates
+
+## 3.10.1
+
+Scenarios can handle tech trees that aren't continually researchable - this allows for very small modded tech trees
+
+Can mod continually researchable techs
+
+Nuke can now no longer destroy Capitals, instead of destroying only capitals - By HadeanLake
+
+Finnish translations added!
+
+Translation updates
+
 ## 3.10.0
 
 Can now create Scenarios and release them with mods!

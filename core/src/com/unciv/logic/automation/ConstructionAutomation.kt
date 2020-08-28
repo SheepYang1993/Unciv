@@ -27,8 +27,11 @@ class ConstructionAutomation(val cityConstructions: CityConstructions){
     val militaryUnits = civUnits.filter { !it.type.isCivilian()}.count()
     val workers = civUnits.filter { it.hasUnique(Constants.workerUnique) }.count().toFloat()
     val cities = civInfo.cities.size
-    val canBuildWorkboat = cityInfo.cityConstructions.getConstructableUnits().map { it.name }.contains("Work Boats")
-            && !cityInfo.getTiles().any { it.civilianUnit?.name == "Work Boats" }
+
+    val buildableWorkboatUnits = cityInfo.cityConstructions.getConstructableUnits()
+            .filter { it.uniques.contains("May create improvements on water resources") }
+    val canBuildWorkboat = buildableWorkboatUnits.any()
+            && !cityInfo.getTiles().any { it.civilianUnit?.hasUnique("May create improvements on water resources")==true }
     val needWorkboat = canBuildWorkboat
             && cityInfo.getTiles().any { it.isWater && it.hasViewableResource(civInfo) && it.improvement == null }
 
@@ -104,7 +107,8 @@ class ConstructionAutomation(val cityConstructions: CityConstructions){
             else if (isAtWar) modifier *= unitsToCitiesRatio * 2
             if (!cityIsOverAverageProduction) modifier /= 5 // higher production cities will deal with this
 
-            if (cityInfo.getCenterTile().civilianUnit?.name == Constants.settler
+            val civilianUnit = cityInfo.getCenterTile().civilianUnit 
+            if (civilianUnit != null && civilianUnit.hasUnique(Constants.settlerUnique)
                     && cityInfo.getCenterTile().getTilesInDistance(5).none { it.militaryUnit?.civInfo == civInfo })
                 modifier = 5f // there's a settler just sitting here, doing nothing - BAD
 
@@ -114,7 +118,7 @@ class ConstructionAutomation(val cityConstructions: CityConstructions){
 
     private fun addWorkBoatChoice() {
         if (needWorkboat) {
-            addChoice(relativeCostEffectiveness, "Work Boats", 0.6f)
+            addChoice(relativeCostEffectiveness, buildableWorkboatUnits.minBy { it.cost }!!.name, 0.6f)
         }
     }
 

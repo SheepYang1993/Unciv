@@ -50,7 +50,7 @@ class TranslationTests {
     private fun allStringAreTranslated(strings: Set<String>): Boolean {
         var allStringsHaveTranslation = true
         for (entry in strings) {
-            val key = if(entry.contains('[')) entry.replace(squareBraceRegex,"[]") else entry
+            val key = if (entry.contains('[')) entry.replace(squareBraceRegex, "[]") else entry
             if (!translations.containsKey(key)) {
                 allStringsHaveTranslation = false
                 println(entry)
@@ -70,7 +70,6 @@ class TranslationTests {
 
     /** For every translatable string find its placeholders and check if all translations have them */
     @Test
-    // TODO - This was broken and was then fixed, but it requires manual work
     fun allTranslationsHaveCorrectPlaceholders() {
         var allTranslationsHaveCorrectPlaceholders = true
         val languages = translations.getLanguages()
@@ -97,12 +96,11 @@ class TranslationTests {
 
     @Test
     fun allPlaceholderKeysMatchEntry() {
-        val squareBraceRegex = Regex("""\[([^]]*)]""")
         var allPlaceholderKeysMatchEntry = true
         for (key in translations.keys) {
-            if ( !key.contains('[') ) continue
+            if (!key.contains('[')) continue
             val translationEntry = translations[key]!!.entry
-            val keyFromEntry = translationEntry.replace(squareBraceRegex,"[]")
+            val keyFromEntry = translationEntry.replace(squareBraceRegex, "[]")
             if (key != keyFromEntry) {
                 allPlaceholderKeysMatchEntry = false
                 println("Entry $translationEntry found under bad key $key")
@@ -116,13 +114,33 @@ class TranslationTests {
     }
 
     @Test
+    fun noTwoPlaceholdersAreTheSame() {
+        var noTwoPlaceholdersAreTheSame = true
+        for (translationEntry in translations.values) {
+            val placeholders = squareBraceRegex.findAll(translationEntry.entry)
+                    .map { it.value }.toList()
+
+            for (placeholder in placeholders)
+                if (placeholders.count { it == placeholder } > 1) {
+                    noTwoPlaceholdersAreTheSame = false
+                    println("Entry $translationEntry has the parameter $placeholder more than once")
+                    break
+                }
+        }
+        Assert.assertTrue(
+                "This test will only pass when no translation keys have the same parameter twice",
+                noTwoPlaceholdersAreTheSame
+        )
+    }
+
+    @Test
     fun allTranslationsEndWithASpace() {
         val templateLines = Gdx.files.internal(TranslationFileWriter.templateFileLocation).reader().readLines()
         var failed = false
         for (line in templateLines) {
             if (line.endsWith(" =")) {
                 println("$line ends without a space at the end")
-                failed=true
+                failed = true
             }
         }
         Assert.assertFalse(failed)
